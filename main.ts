@@ -1,81 +1,78 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
-
-// Remember to rename these classes and interfaces!
-
+import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, } from 'obsidian'
 interface MyPluginSettings {
-	mySetting: string;
+	//自动保存间隔时间,单位秒
+	myInterval: number;
+	//首次打开延迟跳转时间，单位秒
+	myDelay:number;
+	//数据
+	scrollHeightData: Map<string, number | undefined>;
 }
 
 const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: 'default'
+	myInterval: 3,
+	myDelay: 1,
+	//数据
+	scrollHeightData: new Map<string, number>(),
 }
 
 export default class MyPlugin extends Plugin {
 	settings: MyPluginSettings;
-
+	view: MarkdownView | null;
+	scrollHeight: number | undefined;
+	fileName: string;
+	
 	async onload() {
 		await this.loadSettings();
-
-		// This creates an icon in the left ribbon.
-		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
+		console.log("版本号：：：：v1.0.0.1")
+		// 等待Obsidian完全加载
+		this.app.workspace.onLayoutReady(() => {
+			// 获取当前活动的Markdown视图
+			this.view = this.app.workspace.getActiveViewOfType(MarkdownView);
+			//获取当前文件信息，并且监听打开，并且跳转视图
+			this.readOpenFileInfo();
+			//注册时钟，每x秒钟就自动保存当前文件高度
+			this.registerInterval(window.setInterval(() =>{
+				this.settings.scrollHeightData.set(this.fileName,this.scrollHeight);
+				this.saveSettings();
+			},this.settings.myInterval * 1000));
 		});
-		// Perform additional things with the ribbon
-		ribbonIconEl.addClass('my-plugin-ribbon-class');
-
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
+		// 右下角状态栏
 		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status Bar Text');
-
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: 'open-sample-modal-simple',
-			name: 'Open sample modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			}
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'sample-editor-command',
-			name: 'Sample editor command',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				console.log(editor.getSelection());
-				editor.replaceSelection('Sample Editor Command');
-			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-sample-modal-complex',
-			name: 'Open sample modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
-
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
-			}
-		});
-
+		statusBarItemEl.setText(`当前高度:${this.scrollHeight}`)
 		// This adds a settings tab so the user can configure various aspects of the plugin
 		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			console.log('click', evt);
-		});
-
+		this.registerDomEvent(document, "mouseover", (ev) => {
+			this.scrollHeight = this.view?.previewMode.getScroll();
+			statusBarItemEl.setText(`当前高度: ${this.scrollHeight?.toFixed(0)}`);
+		})
 		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
 		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
+	}
+	async readOpenFileInfo() {
+		if (this.view) {
+			const file = this.view.file; // 获取当前文件对象
+			if (!file) throw new Error("获取当前文件对象失败")
+			this.fileName = file.basename; // 获取文件名
+			const delay = 300 + (file.stat.size/10/1024);
+			this.previewScrollTO(delay + this.settings.myDelay * 1000);
+		}
+		this.app.workspace.on("file-open", async (file) => {
+			if (!file) throw new Error("获取文件对象失败")
+			this.fileName = file.basename; // 更新文件名
+			// 更新当前活动的Markdown视图
+			this.view = this.app.workspace.getActiveViewOfType(MarkdownView);
+			const delay = 300 + (file.stat.size/10/1024);
+			this.previewScrollTO(delay);
+		});
+	}
+
+	async previewScrollTO(delay:number){
+		const lastHeight = this.settings.scrollHeightData.get(this.fileName);
+		if(lastHeight){
+			setTimeout(()=>{
+				this.view?.previewMode.applyScroll(lastHeight);
+			},delay)
+		}
 	}
 
 	onunload() {
@@ -83,27 +80,23 @@ export default class MyPlugin extends Plugin {
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		const loadedData = (await this.loadData()) || {};
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedData);
+        // 将 scrollHeightData 从普通对象转换为 Map
+        if (loadedData.scrollHeightData && !(loadedData.scrollHeightData instanceof Map)) {
+            this.settings.scrollHeightData = new Map<string, number | undefined>(
+                Object.entries(loadedData.scrollHeightData)
+            );
+        }
 	}
 
 	async saveSettings() {
-		await this.saveData(this.settings);
-	}
-}
-
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
-
-	onOpen() {
-		const {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
-
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
+		// 将 scrollHeightData 转换为普通对象以便保存
+        const dataToSave = {
+            ...this.settings,
+            scrollHeightData: Object.fromEntries(this.settings.scrollHeightData),
+        };
+        await this.saveData(dataToSave);
 	}
 }
 
@@ -116,19 +109,58 @@ class SampleSettingTab extends PluginSettingTab {
 	}
 
 	display(): void {
-		const {containerEl} = this;
-
+		const { containerEl } = this;
 		containerEl.empty();
-
 		new Setting(containerEl)
-			.setName('Setting #1')
-			.setDesc('It\'s a secret')
-			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
+			.setName('自动保存')
+			.setDesc('设置自动保存时间，间隔单位为秒,默认为3秒，下次启动生效')
+			.addText((text) =>
+			text
+				.setPlaceholder('输入时间间隔（秒）')
+				.setValue(this.plugin.settings.myInterval.toString())
 				.onChange(async (value) => {
-					this.plugin.settings.mySetting = value;
-					await this.plugin.saveSettings();
+					// 将输入的值转换为数字
+					const interval = Number(value);
+					if (!isNaN(interval) && interval > 0) {
+						this.plugin.settings.myInterval = interval;
+						await this.plugin.saveSettings(); // 保存设置
+					}
 				}));
+		//延迟时间设置
+		new Setting(containerEl)
+		.setName('首次延迟时间')
+		.setDesc('刚打开软件，对于默认文件执行跳转的时间，无效则往后延迟，单位为秒')
+		.addText((text) =>
+		text
+			.setPlaceholder('输入延迟时间（秒）')
+			.setValue(this.plugin.settings.myDelay.toString())
+			.onChange(async (value) => {
+				// 将输入的值转换为数字
+				const delay = Number(value);
+				if (!isNaN(delay) && delay > 0) {
+					this.plugin.settings.myDelay = delay;
+					await this.plugin.saveSettings(); // 保存设置
+				}
+			}));
+		// 展示 scrollHeightData 数据
+        new Setting(containerEl)
+            .setName('文件滚动高度数据')
+            .setDesc('以下是存储的文件滚动高度数据：');
+
+        this.plugin.settings.scrollHeightData.forEach((height, filename) => {
+            new Setting(containerEl)
+                .setName(filename) // 文件名
+                .setDesc(`滚动高度: ${height ?? '未定义'}`) // 滚动高度
+                .addButton((button) =>
+                    button
+                        .setButtonText('删除')
+                        .onClick(async () => {
+                            // 删除当前条目
+                            this.plugin.settings.scrollHeightData.delete(filename);
+                            await this.plugin.saveSettings(); // 保存设置
+                            this.display(); // 刷新界面
+                        })
+                );
+        });
 	}
 }

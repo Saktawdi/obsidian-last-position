@@ -1,11 +1,11 @@
 {
-	"id": "sample-plugin",
-	"name": "Sample Plugin",
+	"id": "last-position",
+	"name": "Last Position",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
-	"description": "Demonstrates some of the capabilities of the Obsidian API.",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
-	"fundingUrl": "https://obsidian.md/pricing",
+	"description": "Loading the view to the reading position in Obsidian before closing.",
+	"author": "saktawdi",
+	"authorUrl": "https://sakta.top",
+	"fundingUrl": "https://sakta.top",
 	"isDesktopOnly": false
 }
