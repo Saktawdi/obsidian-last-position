@@ -1,7 +1,7 @@
 {
 	"id": "last-position",
 	"name": "Last Position",
-	"version": "1.0.0",
+	"version": "0.1.0",
 	"minAppVersion": "0.15.0",
 	"description": "Loading the view to the reading position in Obsidian before closing.",
 	"author": "saktawdi",
