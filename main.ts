@@ -10,7 +10,7 @@ interface MyPluginSettings {
 
 const DEFAULT_SETTINGS: MyPluginSettings = {
 	myInterval: 3,
-	myRetryCount: 100,
+	myRetryCount: 30,
 	//数据
 	scrollHeightData: new Map<string, number>(),
 }
@@ -147,8 +147,25 @@ class SampleSettingTab extends PluginSettingTab {
 					if (!isNaN(interval) && interval > 0) {
 						this.plugin.settings.myInterval = interval;
 						await this.plugin.saveSettings(); // 保存设置
+						new Notice("更改成功")
 					}
 				}));
+		new Setting(containerEl)
+			.setName('重试次数')
+			.setDesc('设置重试策略的最大重试次数，默认为30次。⚠请谨慎更改！')
+			.addText((text) =>
+				text
+					.setPlaceholder('输入重试次数')
+					.setValue(this.plugin.settings.myRetryCount.toString())
+					.onChange(async (value) => {
+						// 将输入的值转换为数字
+						const retryCount = Number(value);
+						if (!isNaN(retryCount) && retryCount > 0) {
+							this.plugin.settings.myRetryCount = retryCount;
+							await this.plugin.saveSettings(); // 保存设置
+							new Notice("更改成功")
+						}
+					}));
 		// 展示 scrollHeightData 数据
         new Setting(containerEl)
             .setName('文件滚动高度数据')
