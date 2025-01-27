@@ -3,7 +3,7 @@
 	"name": "Last Position",
 	"version": "0.1.0",
 	"minAppVersion": "0.15.0",
-	"description": "Loading the view to the reading position in Obsidian before closing.",
+	"description": "Automatically scroll to the last viewed position when opening the markdown document.",
 	"author": "saktawdi",
 	"authorUrl": "https://sakta.top",
 	"fundingUrl": "https://sakta.top",
