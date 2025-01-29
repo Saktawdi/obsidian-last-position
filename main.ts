@@ -15,7 +15,7 @@ const DEFAULT_SETTINGS: MyPluginSettings = {
 	scrollHeightData: new Map<string, number>(),
 }
 
-export default class MyPlugin extends Plugin {
+export default class LastPositionPlugin extends Plugin {
 	settings: MyPluginSettings;
 	view: MarkdownView | null;
 	scrollHeight: number | undefined;
@@ -43,7 +43,7 @@ export default class MyPlugin extends Plugin {
 		// This adds a settings tab so the user can configure various aspects of the plugin
 		this.addSettingTab(new AutoSaveScrollSettingsTab (this.app, this));
 
-
+		//监听鼠标
 		this.registerDomEvent(document, "mouseover", (ev) => {
 			this.scrollHeight = this.view?.currentMode.getScroll();
 			statusBarItemEl.setText(`当前高度: ${this.scrollHeight?.toFixed(0)}`);
@@ -121,10 +121,11 @@ export default class MyPlugin extends Plugin {
 	}
 }
 
-class AutoSaveScrollSettingsTab  extends PluginSettingTab {
-	plugin: MyPlugin;
 
-	constructor(app: App, plugin: MyPlugin) {
+class AutoSaveScrollSettingsTab  extends PluginSettingTab {
+	plugin: LastPositionPlugin;
+
+	constructor(app: App, plugin: LastPositionPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
