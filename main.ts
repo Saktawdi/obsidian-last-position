@@ -41,16 +41,13 @@ export default class MyPlugin extends Plugin {
 		const statusBarItemEl = this.addStatusBarItem();
 		statusBarItemEl.setText(`当前高度:${this.scrollHeight}`)
 		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
+		this.addSettingTab(new AutoSaveScrollSettingsTab (this.app, this));
 
 
 		this.registerDomEvent(document, "mouseover", (ev) => {
 			this.scrollHeight = this.view?.currentMode.getScroll();
 			statusBarItemEl.setText(`当前高度: ${this.scrollHeight?.toFixed(0)}`);
 		})
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
 	}
 
 
@@ -61,12 +58,13 @@ export default class MyPlugin extends Plugin {
 		}else{
 			const file = this.view.file; // 获取当前文件对象
 			if (!file) throw new Error("获取当前文件对象失败")
-			this.fileName = file.basename; // 获取文件名
+			
+			this.fileName = file.path; // 获取文件名
 			this.previewScrollTO();
 		}
 		this.app.workspace.on("file-open", async (file) => {
 			if (!file) throw new Error("获取文件对象失败")
-			this.fileName = file.basename; // 更新文件名
+			this.fileName = file.path; // 更新文件名
 			// 更新当前活动的Markdown视图
 			this.view = this.app.workspace.getActiveViewOfType(MarkdownView);
 			this.previewScrollTO();
@@ -123,7 +121,7 @@ export default class MyPlugin extends Plugin {
 	}
 }
 
-class SampleSettingTab extends PluginSettingTab {
+class AutoSaveScrollSettingsTab  extends PluginSettingTab {
 	plugin: MyPlugin;
 
 	constructor(app: App, plugin: MyPlugin) {
