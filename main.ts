@@ -1,5 +1,5 @@
 import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, WorkspaceLeaf, } from 'obsidian'
-interface MyPluginSettings {
+interface LastPositionSettings {
 	//自动保存间隔时间,单位秒
 	myInterval: number;
 	//重试策略-重试次数最大值
@@ -8,7 +8,7 @@ interface MyPluginSettings {
 	scrollHeightData: Map<string, number | undefined>;
 }
 
-const DEFAULT_SETTINGS: MyPluginSettings = {
+const DEFAULT_SETTINGS: LastPositionSettings = {
 	myInterval: 3,
 	myRetryCount: 30,
 	//数据
@@ -16,7 +16,7 @@ const DEFAULT_SETTINGS: MyPluginSettings = {
 }
 
 export default class LastPositionPlugin extends Plugin {
-	settings: MyPluginSettings;
+	settings: LastPositionSettings;
 	view: MarkdownView | null;
 	scrollHeight: number | undefined;
 	fileName: string;
