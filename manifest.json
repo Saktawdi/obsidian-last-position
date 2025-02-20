@@ -1,11 +1,10 @@
 {
 	"id": "last-position",
 	"name": "Last Position",
-	"version": "0.1.2",
+	"version": "0.1.3",
 	"minAppVersion": "0.15.0",
 	"description": "Automatically scroll to the last viewed position when opening the markdown document.",
 	"author": "saktawdi",
 	"authorUrl": "https://sakta.top",
-	"fundingUrl": "https://sakta.top",
 	"isDesktopOnly": false
 }
