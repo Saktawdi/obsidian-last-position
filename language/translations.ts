@@ -1,5 +1,3 @@
-export type TranslationKey = 'zh' | 'en';
-
 export interface Translation {
     currentHeight: string;
     autoSave: string;
@@ -26,7 +24,7 @@ export interface Translation {
     retryLimit: string;
 }
 
-export const TRANSLATIONS: Record<TranslationKey, Translation> = {
+export const TRANSLATIONS: Record<string, Translation> = {
     zh: {
         currentHeight: '当前高度',
         autoSave: '自动保存',

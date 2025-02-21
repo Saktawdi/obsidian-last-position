@@ -1,5 +1,5 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, WorkspaceLeaf, } from 'obsidian'
-import { TRANSLATIONS, TranslationKey } from './language/translations';
+import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, WorkspaceLeaf,getLanguage} from 'obsidian'
+import { TRANSLATIONS, Translation } from './language/translations';
 
 interface LastPositionSettings {
 	//自动保存间隔时间,单位秒
@@ -10,8 +10,6 @@ interface LastPositionSettings {
 	scrollHeightData: Map<string, number | undefined>;
 	//监听事件
 	listenEvent: string;
-	//语言
-	language: TranslationKey;
 }
 
 const DEFAULT_SETTINGS: LastPositionSettings = {
@@ -21,8 +19,12 @@ const DEFAULT_SETTINGS: LastPositionSettings = {
 	scrollHeightData: new Map<string, number>(),
 	//监听事件
 	listenEvent: "mouseover",
-	//语言
-	language: "zh",
+}
+
+function getTranslation(): Translation {
+	const lang = getLanguage();
+	const t = TRANSLATIONS[lang] || TRANSLATIONS['en'];
+	return t;
 }
 
 export default class LastPositionPlugin extends Plugin {
@@ -32,7 +34,11 @@ export default class LastPositionPlugin extends Plugin {
 	
 	async onload() {
 		await this.loadSettings();
-		const t = TRANSLATIONS[this.settings.language];
+		const lang = getLanguage();
+		if (!TRANSLATIONS[lang]) {
+			new Notice(`[Last-Position-Plugin]:Language "${lang}" not supported. Falling back to English.`);
+		}
+		const t = getTranslation();
 		// 等待Obsidian加载
 		this.app.workspace.onLayoutReady(() => {
 			//获取当前文件信息，并且监听打开，并且跳转视图
@@ -62,7 +68,7 @@ export default class LastPositionPlugin extends Plugin {
 
 	async readOpenFileInfo() {
 		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-		const t = TRANSLATIONS[this.settings.language];
+		const t = getTranslation();
 		if (!view) {
 			console.warn(t.noActiveView);
 			return;
@@ -73,11 +79,14 @@ export default class LastPositionPlugin extends Plugin {
 			this.fileName = file.path; // 获取文件名
 			this.previewScrollTO();
 		}
-		this.app.workspace.on("file-open", async (file) => {
-			if (!file) throw new Error(t.getFileError)
-			this.fileName = file.path; // 更新文件名
-			this.previewScrollTO();
-		});
+		// 注册监听文件打开事件
+		this.registerEvent(
+			this.app.workspace.on("file-open", async (file) => {
+				if (!file) throw new Error(t.getFileError)
+				this.fileName = file.path; // 更新文件名
+				this.previewScrollTO();
+			})
+		);
 	}
 
 	/**
@@ -85,7 +94,7 @@ export default class LastPositionPlugin extends Plugin {
 	 */
 	async previewScrollTO(){
 		const lastHeight = this.settings.scrollHeightData.get(this.fileName);
-		const t = TRANSLATIONS[this.settings.language];
+		const t = getTranslation();
 		if(lastHeight){
 			let retryCount  = 0;
 			const maxRetries = this.settings.myRetryCount;
@@ -143,29 +152,7 @@ class AutoSaveScrollSettingsTab  extends PluginSettingTab {
 	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
-		const t = TRANSLATIONS[this.plugin.settings.language];
-		 // 语言设置
-		 new Setting(containerEl)
-		 .setName(t.language)
-		 .setDesc(t.languageDesc)
-		 .addDropdown((dropdown) => {
-			 // 自动从TRANSLATIONS添加选项
-			 Object.keys(TRANSLATIONS).forEach(lang => {
-				 const label = lang === 'zh' ? '中文' : 
-							  lang === 'en' ? 'English' : 
-							  lang;
-				 dropdown.addOption(lang, label);
-			 });
-			 
-			 return dropdown
-				 .setValue(this.plugin.settings.language)
-				 .onChange(async (value: TranslationKey) => {
-					 this.plugin.settings.language = value;
-					 await this.plugin.saveSettings();
-					 new Notice(t.restartNotice);
-					 this.display();
-				 });
-		 });
+		const t = getTranslation();
 		//自动保存时间间隔设置
 		new Setting(containerEl)
 			.setName(t.autoSave)
