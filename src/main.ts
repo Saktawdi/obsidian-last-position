@@ -7,7 +7,7 @@ export default class LastPositionPlugin extends Plugin {
 	scrollHeight: number | undefined;
 	fileName: string;
 	statusBarItemEl: HTMLElement; // 右下角状态栏用于显示滚动高度
-	isLoading: boolean;//是否正在跳转至目标高度
+	isLoading: boolean = false;//是否正在跳转至目标高度
 	
 	async onload() {
 		await this.loadSettings();
@@ -122,6 +122,8 @@ export default class LastPositionPlugin extends Plugin {
 				}
 			};
 			retry();
+		}else{
+			this.isLoading = false;
 		}
 	}
 
