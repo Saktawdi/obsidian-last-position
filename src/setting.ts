@@ -1,6 +1,6 @@
 import { App, Notice, PluginSettingTab, Setting } from 'obsidian';
 import { getTranslation } from '.language/translations';
-import { ConfirmModal } from '../component/confirmedModal';
+import { ConfirmModal } from './component/confirmedModal';
 import LastPositionPlugin from './main';
 
 export interface LastPositionSettings {

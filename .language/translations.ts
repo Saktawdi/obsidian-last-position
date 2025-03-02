@@ -1,5 +1,16 @@
 import { getLanguage as obsidianGetLanguage } from 'obsidian';
 
+export function getTranslation(): Translation {
+	const lang = obsidianGetLanguage();
+	const t = TRANSLATIONS[lang] || TRANSLATIONS['en'];
+	return t;
+}
+
+export function getLanguage(): string {
+	return obsidianGetLanguage();
+}
+
+
 export interface Translation {
     currentHeight: string;
     autoSave: string;
@@ -24,9 +35,6 @@ export interface Translation {
     noActiveView: string;
     getFileError: string;
     retryLimit: string;
-    clearAllData: string;
-    clearAllDataDesc: string;
-    clearAll: string;
     table_fileName: string;
     table_scrollHeight: string;
     table_actions: string;
@@ -62,9 +70,6 @@ export const TRANSLATIONS: Record<string, Translation> = {
         noActiveView: '当前没有活动的 Markdown 视图',
         getFileError: '获取文件对象失败',
         retryLimit: '重试次数达到上限，停止重试',
-        clearAllData: "清除所有数据",
-        clearAllDataDesc: "清除所有保存的滚动高度数据",
-        clearAll: "清除所有",
         table_fileName: '文件名',
         table_scrollHeight: '滚动高度',
         table_actions: '操作',
@@ -98,9 +103,6 @@ export const TRANSLATIONS: Record<string, Translation> = {
         noActiveView: 'No active Markdown view',
         getFileError: 'Failed to get file object',
         retryLimit: 'Retry limit reached, stopping retries',
-        clearAllData: "Clear All Data",
-        clearAllDataDesc: "Remove all saved scroll positions",
-        clearAll: "Clear All",
         table_fileName: 'File Name',
         table_scrollHeight: 'Scroll Height',
         table_actions: 'Actions',
@@ -112,13 +114,3 @@ export const TRANSLATIONS: Record<string, Translation> = {
     }
 }; 
 
-
-export function getTranslation(): Translation {
-	const lang = obsidianGetLanguage();
-	const t = TRANSLATIONS[lang] || TRANSLATIONS['en'];
-	return t;
-}
-
-export function getLanguage(): string {
-	return obsidianGetLanguage();
-}
