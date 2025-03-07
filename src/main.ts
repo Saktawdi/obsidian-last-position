@@ -1,6 +1,6 @@
 import { App, Editor, MarkdownView, Notice, Plugin, WorkspaceLeaf} from 'obsidian'
 import { TRANSLATIONS,getTranslation,getLanguage} from '.language/translations';
-import { LastPositionSettings, DEFAULT_SETTINGS, AutoSaveScrollSettingsTab } from './setting';
+import { LastPositionSettings, DEFAULT_SETTINGS, AutoSaveScrollSettingsTab, ScrollPositionData } from './setting';
 
 export default class LastPositionPlugin extends Plugin {
 	settings: LastPositionSettings;
@@ -19,7 +19,6 @@ export default class LastPositionPlugin extends Plugin {
 		// 右下角状态栏
         this.statusBarItemEl = this.addStatusBarItem();
         this.statusBarItemEl.setText(`${t.currentHeight}: ${this.scrollHeight || 0}`);
-
 		// 等待Obsidian加载
 		this.app.workspace.onLayoutReady(() => {
 			//获取当前文件信息，并且监听打开，并且跳转视图
@@ -29,7 +28,20 @@ export default class LastPositionPlugin extends Plugin {
 				if(this.isLoading){
 					return;
 				}
-				this.settings.scrollHeightData.set(this.fileName,this.scrollHeight);
+				//如果文件名不存在，则不保存,调用readOpenFileInfo()
+				if(!this.fileName){
+					console.warn(t.noActiveView);
+					this.readOpenFileInfo();
+					return;
+				}
+				//scrollHeight为undefined，则不保存
+				if(!this.scrollHeight){
+					return;
+				}
+				this.settings.scrollHeightData.set(this.fileName,{
+					height: this.scrollHeight,
+					lastAccessed: Date.now()
+				});
 				this.saveSettings();
 				// 保存时状态栏变色效果
 				this.flashStatusBar();
@@ -38,13 +50,16 @@ export default class LastPositionPlugin extends Plugin {
 		});
 		// This adds a settings tab so the user can configure various aspects of the plugin
 		this.addSettingTab(new AutoSaveScrollSettingsTab (this.app, this));
-		
 		//监听事件
 		this.registerDomEvent(document, this.settings.listenEvent as keyof DocumentEventMap, (ev) => {
 			const view = this.app.workspace.getActiveViewOfType(MarkdownView);
 			this.scrollHeight = view?.currentMode.getScroll();
 			this.statusBarItemEl.setText(`${t.currentHeight}: ${this.scrollHeight?.toFixed(0)}`);
 		})
+		// 如果启用了自动清理，执行一次清理
+		if (this.settings.enableAutoCleanup) {
+			this.cleanupOldData();
+		}
 	}
 
 	/**
@@ -94,15 +109,17 @@ export default class LastPositionPlugin extends Plugin {
 	 */
 	async previewScrollTO(){
 		this.isLoading = true;
-		const lastHeight = this.settings.scrollHeightData.get(this.fileName);
+		const lastPositionData = this.settings.scrollHeightData.get(this.fileName);
 		const t = getTranslation();
-		if(lastHeight){
+		if(lastPositionData && lastPositionData.height !== undefined){
 			let retryCount = 0;
 			const maxRetries = this.settings.myRetryCount;
+			const targetHeight = lastPositionData.height;
 			const retry = () => {
 				//如果重试次数大于最大重试次数，则停止重试
 				if (retryCount >= maxRetries) {
 					console.warn(t.retryLimit);
+					new Notice(t.retryLimit);
 					this.isLoading = false;
 					return;
 				}
@@ -112,10 +129,10 @@ export default class LastPositionPlugin extends Plugin {
 					setTimeout(retry, 100);
 					return;
 				}
-				view.currentMode.applyScroll(lastHeight);
+				view.currentMode.applyScroll(targetHeight);
 				this.scrollHeight = view.currentMode.getScroll();
 				// 检查是否成功设置了滚动位置
-				if (Math.abs(this.scrollHeight - lastHeight) > 1) {
+				if (Math.abs(this.scrollHeight - targetHeight) > 1) {
 					setTimeout(retry, 100); // 每 100ms 重试一次
 				}else{
 					this.isLoading = false;
@@ -134,12 +151,22 @@ export default class LastPositionPlugin extends Plugin {
 	async loadSettings() {
 		const loadedData = (await this.loadData()) || {};
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedData);
-        // 将 scrollHeightData 从普通对象转换为 Map
-        if (loadedData.scrollHeightData && !(loadedData.scrollHeightData instanceof Map)) {
-            this.settings.scrollHeightData = new Map<string, number | undefined>(
-                Object.entries(loadedData.scrollHeightData)
-            );
-        }
+		// 将 scrollHeightData 从普通对象转换为 Map
+		if (loadedData.scrollHeightData && !(loadedData.scrollHeightData instanceof Map)) {
+			this.settings.scrollHeightData = new Map(
+				Object.entries(loadedData.scrollHeightData).map(([key, value]) => {
+					// 兼容旧版本数据格式（直接是数字）
+					if (typeof value === 'number') {
+						return [key, {
+							height: value,
+							lastAccessed: Date.now()
+						}];
+					}
+					// 新版本数据格式（已经是对象）
+					return [key, value as ScrollPositionData];
+				})
+			);
+		}
 	}
 
 	async saveSettings() {
@@ -149,6 +176,30 @@ export default class LastPositionPlugin extends Plugin {
             scrollHeightData: Object.fromEntries(this.settings.scrollHeightData),
         };
         await this.saveData(dataToSave);
+	}
+	/**
+	 * 清理过期数据
+	 */
+	cleanupOldData() {
+		if (!this.settings.enableAutoCleanup) return;
+		
+		const now = Date.now();
+		const cutoffTime = now - (this.settings.cleanupDays * 24 * 60 * 60 * 1000); // 转换天数为毫秒
+		let cleanedCount = 0;
+		
+		// 遍历所有数据，删除过期的
+		for (const [path, data] of this.settings.scrollHeightData.entries()) {
+			if (data.lastAccessed && data.lastAccessed < cutoffTime) {
+				this.settings.scrollHeightData.delete(path);
+				cleanedCount++;
+			}
+		}
+		
+		// 如果有数据被清理，保存设置
+		if (cleanedCount > 0) {
+			console.log(`[Last-Position-Plugin]: Cleaned up ${cleanedCount} old entries`);
+			this.saveSettings();
+		}
 	}
 }
 

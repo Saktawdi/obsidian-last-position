@@ -2,6 +2,7 @@ import { App, Notice, PluginSettingTab, Setting } from 'obsidian';
 import { getTranslation } from '.language/translations';
 import { DataTable } from './component/dataTable';
 import LastPositionPlugin from './main';
+import { DataExportImportUtil } from './utils/dataExportImportUtil';
 
 export interface LastPositionSettings {
 	//自动保存间隔时间,单位秒
@@ -9,22 +10,40 @@ export interface LastPositionSettings {
 	//重试策略-重试次数最大值
 	myRetryCount: number;
 	//数据
-	scrollHeightData: Map<string, number | undefined>;
+	scrollHeightData: Map<string, ScrollPositionData>;
 	//监听事件
 	listenEvent: string;
 	//表格每页显示的条目数
 	pageSize: number;
+	//是否启用数据自动清理
+	enableAutoCleanup: boolean;
+	//数据自动清理天数
+	cleanupDays: number;
+	//数据管理设置是否展开
+	dataManagementSettingsOpen: boolean;
+}
+
+export interface ScrollPositionData {
+	height: number | undefined;
+	lastAccessed: number; // 时间戳，表示最后访问时间
+
 }
 
 export const DEFAULT_SETTINGS: LastPositionSettings = {
 	myInterval: 3,
 	myRetryCount: 30,
 	//数据
-	scrollHeightData: new Map<string, number>(),
+	scrollHeightData: new Map<string, ScrollPositionData>(),
 	//监听事件
 	listenEvent: "mouseover",
 	//表格每页显示的条目数,默认10条
 	pageSize: 10,
+	//是否启用数据自动清理
+	enableAutoCleanup: false,	
+	//数据自动清理天数,默认30天
+	cleanupDays: 30,
+	//数据管理设置是否展开
+	dataManagementSettingsOpen: false,
 }
 
 export class AutoSaveScrollSettingsTab  extends PluginSettingTab {
@@ -111,6 +130,13 @@ export class AutoSaveScrollSettingsTab  extends PluginSettingTab {
 						this.display(); // 刷新界面
 					});
 			});
+		// 添加数据管理抽屉设置
+		this.buildDataManagementSettings(containerEl.createEl("details", {
+			cls: "lastposition-nested-settings",
+			attr: {
+				...(this.plugin.settings.dataManagementSettingsOpen ? { open: true } : {})
+			}
+		}));
 		// 使用DataTable组件渲染表格
 		this.dataTable = new DataTable({
 			containerEl: containerEl,
@@ -126,51 +152,68 @@ export class AutoSaveScrollSettingsTab  extends PluginSettingTab {
 			this.dataTable.render();
 			this.dataTable.setCurrentPage(currentPage);
 		}
-		// // 展示 scrollHeightData 数据 - 使用表格形式
-		// const dataSection = containerEl.createDiv('data-table-section');
-		// dataSection.createEl('h3', { text: t.scrollData });
-		// dataSection.createEl('p', { text: t.scrollDataDesc });
-		// // 创建表格
-		// if (this.plugin.settings.scrollHeightData.size > 0) {
-		// 	const table = dataSection.createEl('table');
-		// 	// 设置表格宽度占满容器
-		// 	table.style.width = '100%';
-		// 	// 表头
-		// 	const thead = table.createEl('thead');
-		// 	// 样式：表头内容靠左
-		// 	thead.style.textAlign = 'left';
-		// 	const headerRow = thead.createEl('tr');
-		// 	headerRow.createEl('th', { text: t.table_fileName });
-		// 	headerRow.createEl('th', { text: t.table_scrollHeight });
-		// 	headerRow.createEl('th', { text: t.table_actions });
-		// 	// 表格内容
-		// 	const tbody = table.createEl('tbody');
-		// 	// 样式：表格内容靠左
-		// 	tbody.style.textAlign = 'left';
-		// 	// 样式：每行间隔
-		// 	tbody.style.padding = '20px';
-		// 	this.plugin.settings.scrollHeightData.forEach((height, filename) => {
-		// 		const row = tbody.createEl('tr');
-		// 		// 文件名列
-		// 		row.createEl('td', { text: filename });
-		// 		// 高度列
-		// 		row.createEl('td', { text: `${height?.toFixed(0) ?? t.undefined}` });
-		// 		// 操作列
-		// 		const actionCell = row.createEl('td');
-		// 		const deleteBtn = actionCell.createEl('button', { text: t.delete });
-		// 		deleteBtn.addEventListener('click', async () => {
-		// 		// 使用确认对话框
-		// 		const confirmModal = new ConfirmModal(this.app,{message: t.confirmClearMessage + '-[' + filename + ']'});
-		// 		const confirmed = await confirmModal.openAndAwait();
-		// 		if (confirmed) {
-		// 			this.plugin.settings.scrollHeightData.delete(filename);
-		// 			await this.plugin.saveSettings();
-		// 			this.display(); // 刷新界面
-		// 		}
-		// 		});
-		// 	});
-		// } else {
-		// 	dataSection.createEl('p', { text: t.noDataAvailable});
-		// }
+	}
+
+	buildDataManagementSettings(containerEl: HTMLDetailsElement) {
+		const t = getTranslation();
+		containerEl.empty();
+				
+		// 创建抽屉标题
+		const summary = containerEl.createEl("summary", {cls: "lastposition-nested-settings"});
+		summary.setText(t.dataManagement);
+		
+		// 自动清理设置
+		new Setting(containerEl)
+			.setName(t.enableAutoCleanup)
+			.setDesc(t.enableAutoCleanupDesc)
+			.addToggle((toggle) => {
+				toggle.setValue(this.plugin.settings.enableAutoCleanup)
+					.onChange(async (value) => {
+						new Notice(t.cleanupDaysNotice);
+						this.plugin.settings.enableAutoCleanup = value;
+						await this.plugin.saveSettings();
+					});
+			});
+		// 自动清理天数设置
+		new Setting(containerEl)
+		.setName(t.cleanupDays)
+		.setDesc(t.cleanupDaysDesc)
+		.addSlider(slider => {
+			slider.setLimits(7, 365, 1)
+				.setValue(this.plugin.settings.cleanupDays)
+				.setDynamicTooltip()
+				.onChange(async (value) => {
+					this.plugin.settings.cleanupDays = value;
+					await this.plugin.saveSettings();
+				});
+		});
+		// 导入导出按钮
+		const importExportSetting = new Setting(containerEl)
+			.setName(t.dataImportExport)
+			.setDesc(t.dataImportExportDesc);
+		
+		// 导出按钮
+		importExportSetting.addButton((button) => {
+			button
+				.setButtonText(t.exportData)
+				.setCta()
+				.onClick(async () => {
+					DataExportImportUtil.exportData(this.plugin);
+				});
+		});
+		// 导入按钮
+		importExportSetting.addButton((button) => {
+			button
+				.setButtonText(t.importData)
+				.onClick(async () => {
+					DataExportImportUtil.importData(this.plugin, () => {
+						this.display(); // 刷新界面
+					});
+				});
+		});
 	}
 }
+
+
+
+

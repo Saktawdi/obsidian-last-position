@@ -48,6 +48,23 @@ export interface Translation {
     totalItems: string;
     prevPage: string;
     nextPage: string;
+    table_lastAccessed: string;
+    never: string;
+
+    dataManagement: string;
+    exportData: string;
+    importData: string;
+    noDataToExport: string;
+    dataExported: string;
+    dataImported: string;
+    importError: string;
+    enableAutoCleanup: string;
+    enableAutoCleanupDesc: string;
+    dataImportExport: string;
+    dataImportExportDesc: string;
+    cleanupDays: string;
+    cleanupDaysDesc: string;
+    cleanupDaysNotice: string;
 }
 
 export const TRANSLATIONS: Record<string, Translation> = {
@@ -88,6 +105,22 @@ export const TRANSLATIONS: Record<string, Translation> = {
         totalItems: '总条目数',
         prevPage: '上一页',
         nextPage: '下一页',
+        table_lastAccessed: '最后访问时间',
+        never: '从未',
+        exportData: "导出数据",
+        importData: "导入数据",
+        noDataToExport: "没有可导出的数据",
+        dataExported: "数据导出成功",
+        dataImported: "已导入 {count} 条滚动位置记录",
+        importError: "导入数据时出错。请检查文件格式。",
+        dataManagement: "数据管理",
+        enableAutoCleanup: "启用自动清理",
+        enableAutoCleanupDesc: "启用自动清理，自动清理过期的数据",
+        dataImportExport: "数据导入导出",
+        dataImportExportDesc: "数据导入导出",
+        cleanupDays: "数据清理天数",
+        cleanupDaysDesc: "设置要清理的数据距今未曾访问的天数，默认30天",
+        cleanupDaysNotice: "数据自动清理设置已更改，启动插件时生效",
     },
     en: {
         currentHeight: 'Current Height',
@@ -126,6 +159,22 @@ export const TRANSLATIONS: Record<string, Translation> = {
         totalItems: 'Total Items',
         prevPage: 'Previous Page',
         nextPage: 'Next Page',
+        table_lastAccessed: 'Last Accessed',
+        never: 'Never',
+        exportData: "Export Data",
+        importData: "Import Data",
+        noDataToExport: "No data to export",
+        dataExported: "Data exported successfully",
+        dataImported: "Imported {count} scroll position records",
+        importError: "Error importing data. Please check the file format.",
+        dataManagement: "Data Management",
+        enableAutoCleanup: "Enable Auto Cleanup",
+        enableAutoCleanupDesc: "Enable auto cleanup, automatically clean up expired data",
+        dataImportExport: "Data Import Export",
+        dataImportExportDesc: "Data Import Export",
+        cleanupDays: "Cleanup Days",
+        cleanupDaysDesc: "Automatically remove data entries older than this many days (minimum 7 days)",
+        cleanupDaysNotice: "Cleanup setting have been changed, take effect after restarting the plugin",
     }
 }; 
 

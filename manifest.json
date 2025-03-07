@@ -1,7 +1,7 @@
 {
 	"id": "last-position",
 	"name": "Last Position",
-	"version": "0.2.3",
+	"version": "0.2.4",
 	"minAppVersion": "1.8.0",
 	"description": "Automatically scroll to the last viewed position when opening the Markdown document.",
 	"author": "saktawdi",
