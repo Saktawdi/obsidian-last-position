@@ -43,6 +43,11 @@ export interface Translation {
     confirmClearMessage: string;
     confirmed: string;
     cancel: string;
+    pageSize: string;
+    pageSizeDesc: string;
+    totalItems: string;
+    prevPage: string;
+    nextPage: string;
 }
 
 export const TRANSLATIONS: Record<string, Translation> = {
@@ -78,6 +83,11 @@ export const TRANSLATIONS: Record<string, Translation> = {
         confirmClearMessage: '确认删除此条数据？',
         confirmed: '确认',
         cancel: '取消',
+        pageSize: '每页显示条目数',
+        pageSizeDesc: '设置表格每页显示的条目数，默认10条',
+        totalItems: '总条目数',
+        prevPage: '上一页',
+        nextPage: '下一页',
     },
     en: {
         currentHeight: 'Current Height',
@@ -111,6 +121,11 @@ export const TRANSLATIONS: Record<string, Translation> = {
         confirmClearMessage: 'Are you sure you want to clear this data?',
         confirmed: 'Confirmed',
         cancel: 'Cancel',
+        pageSize: 'Page Size',
+        pageSizeDesc: 'Set the number of entries to display per page in the table, default is 10',
+        totalItems: 'Total Items',
+        prevPage: 'Previous Page',
+        nextPage: 'Next Page',
     }
 }; 
 
