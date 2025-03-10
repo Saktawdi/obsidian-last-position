@@ -52,7 +52,7 @@ The plugin provides the following configuration options, which can be adjusted i
 
 - **Performance Impact**: The plugin periodically saves scroll positions, and frequent save operations may have a slight impact on performance. It's recommended to adjust the save interval according to your actual needs.
 - **Retry Mechanism**: If restoring the scroll position fails, the plugin will try multiple times. If the retry count reaches the limit, the plugin will stop trying and output a warning log.
-- **Compatibility**: The plugin has been tested on Windows, macOS, and Linux. If you encounter any issues, please submit an Issue.
+- **Compatibility**: The plugin has been tested on Windows. If you encounter any issues, please submit an Issue.
 
 ## License
 
