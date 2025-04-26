@@ -7,7 +7,8 @@ export default class LastPositionPlugin extends Plugin {
 	scrollHeight: number | undefined;
 	fileName: string;
 	statusBarItemEl: HTMLElement; // 右下角状态栏用于显示滚动高度
-	isLoading: boolean = false;//是否正在跳转至目标高度
+	isLoading: boolean = false; //是否正在跳转至目标高度
+	fileNameList: string[] = []; //文件名列表
 	
 	async onload() {
 		await this.loadSettings();
@@ -23,6 +24,7 @@ export default class LastPositionPlugin extends Plugin {
 		this.app.workspace.onLayoutReady(() => {
 			//获取当前文件信息，并且监听打开，并且跳转视图
 			this.readOpenFileInfo();
+			this.registerOpenFileEvent();
 			//注册时钟，每x秒钟就自动保存当前文件高度
 			this.registerInterval(window.setInterval(() =>{
 				if(this.isLoading){
@@ -30,7 +32,6 @@ export default class LastPositionPlugin extends Plugin {
 				}
 				//如果文件名不存在，则不保存,调用readOpenFileInfo()
 				if(!this.fileName){
-					console.warn(t.noActiveView);
 					this.readOpenFileInfo();
 					return;
 				}
@@ -50,7 +51,7 @@ export default class LastPositionPlugin extends Plugin {
 		});
 		// This adds a settings tab so the user can configure various aspects of the plugin
 		this.addSettingTab(new AutoSaveScrollSettingsTab (this.app, this));
-		//监听事件
+		//监听事件：触发高度数据更新
 		this.registerDomEvent(document, this.settings.listenEvent as keyof DocumentEventMap, (ev) => {
 			const view = this.app.workspace.getActiveViewOfType(MarkdownView);
 			this.scrollHeight = view?.currentMode.getScroll();
@@ -81,25 +82,43 @@ export default class LastPositionPlugin extends Plugin {
         }, 500);
     }
 
+	//读取打开的文件信息
 	async readOpenFileInfo() {
 		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
 		const t = getTranslation();
 		if (!view) {
-			console.warn(t.noActiveView);
+			//console.warn(t.noActiveView);
 			return;
 		}else{
 			const file = view.file; // 获取当前文件对象
-			if (!file) throw new Error(t.getFileError)
-			
+			if (!file){
+				console.warn(t.getFileError);
+				return;
+			}
 			this.fileName = file.path; // 获取文件名
+		}
+	}
+
+	//注册文件打开事件
+	async registerOpenFileEvent(){
+		const t = getTranslation();
+		//如果首次打开第一个文件，则添加文件名，并且跳转
+		if(this.fileNameList.length === 0){
+			this.fileNameList.push(this.fileName);
 			this.previewScrollTO();
 		}
-		// 注册监听文件打开事件
 		this.registerEvent(
 			this.app.workspace.on("file-open", async (file) => {
-				if (!file) throw new Error(t.getFileError)
+				if (!file){
+					console.warn(t.getFileError);
+					return;
+				}
 				this.fileName = file.path; // 更新文件名
-				this.previewScrollTO();
+				//如果文件名列表中不存在，则添加且跳转
+				if(!this.fileNameList.includes(this.fileName)){
+					this.fileNameList.push(this.fileName);
+					this.previewScrollTO();
+				}
 			})
 		);
 	}
