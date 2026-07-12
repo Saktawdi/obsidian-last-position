@@ -132,3 +132,36 @@ test('debounced scroll saves the exact leaf including position zero', async () =
 	assert.equal(getPersists() > 0, true);
 	await coordinator.dispose();
 });
+
+test('does not restore an unchanged leaf on repeated layout reconciliation', async () => {
+	const source = new CoordinatorLeafSource();
+	const store = new PositionStore();
+	store.save('leaf-a', 'a.md', 10, 1);
+	const { coordinator } = createCoordinator(source, store);
+
+	coordinator.start(source.leaves[0].leaf);
+	await nextTurn();
+	source.leaves[0].view.scroll = 15;
+	coordinator.reconcile(true);
+	await nextTurn();
+
+	assert.equal(source.leaves[0].view.scroll, 15);
+	await coordinator.dispose();
+});
+
+test('background leaf cannot consume anchor suppression for the active destination leaf', async () => {
+	const source = new CoordinatorLeafSource();
+	source.leaves[0].filePath = 'b.md';
+	const store = new PositionStore();
+	store.save('leaf-a', 'b.md', 5, 1);
+	store.save('leaf-b', 'b.md', 20, 1);
+	const { coordinator } = createCoordinator(source, store);
+
+	coordinator.markAnchorNavigation('b.md');
+	coordinator.start(source.leaves[1].leaf);
+	await nextTurn();
+
+	assert.equal(source.leaves[0].view.scroll, 5);
+	assert.equal(source.leaves[1].view.scroll, 0);
+	await coordinator.dispose();
+});

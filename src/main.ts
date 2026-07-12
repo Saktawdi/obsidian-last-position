@@ -6,6 +6,7 @@ import { AnchorSuppression } from './position/anchorSuppression';
 import { PositionCoordinator } from './position/positionCoordinator';
 import { PositionStore, migratePositionState } from './position/positionStore';
 import { RestorationScheduler } from './position/restorationScheduler';
+import { SerializedTaskQueue } from './position/serializedTaskQueue';
 import { AutoSaveScrollSettingsTab, DEFAULT_SETTINGS, LastPositionSettings } from './setting';
 
 export default class LastPositionPlugin extends Plugin {
@@ -13,6 +14,7 @@ export default class LastPositionPlugin extends Plugin {
 	statusBarItemEl: HTMLElement;
 	positionStore: PositionStore;
 	private coordinator?: PositionCoordinator<unknown, unknown>;
+	private readonly persistenceQueue = new SerializedTaskQueue();
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -30,8 +32,9 @@ export default class LastPositionPlugin extends Plugin {
 		this.app.workspace.onLayoutReady(() => this.initializeCoordinator());
 	}
 
-	onunload(): void {
-		void this.coordinator?.dispose();
+	async onunload(): Promise<void> {
+		await this.coordinator?.dispose();
+		await this.persistenceQueue.flush();
 	}
 
 	async loadSettings(): Promise<void> {
@@ -51,19 +54,15 @@ export default class LastPositionPlugin extends Plugin {
 	}
 
 	async saveSettings(): Promise<void> {
-		this.positionStore.replaceFileRecords(Object.fromEntries(this.settings.scrollHeightData));
-		await this.persistPositionState();
+		await this.enqueuePositionPersistence(false);
+	}
+
+	async saveLegacyPositionSettings(): Promise<void> {
+		await this.enqueuePositionPersistence(true);
 	}
 
 	async persistPositionState(): Promise<void> {
-		const positionState = this.positionStore.snapshot();
-		this.settings.positionState = positionState;
-		this.settings.scrollHeightData = new Map(Object.entries(positionState.files));
-		await this.saveData({
-			...this.settings,
-			positionState,
-			scrollHeightData: positionState.files,
-		});
+		await this.enqueuePositionPersistence(false);
 	}
 
 	flashStatusBar(): void {
@@ -88,7 +87,7 @@ export default class LastPositionPlugin extends Plugin {
 
 		if (cleanedCount > 0) {
 			console.log(`[Last-Position-Plugin]: Cleaned up ${cleanedCount} old entries`);
-			void this.saveSettings();
+			void this.saveLegacyPositionSettings();
 		}
 	}
 
@@ -155,5 +154,24 @@ export default class LastPositionPlugin extends Plugin {
 	private updateStatusBar(height: number): void {
 		const t = getTranslation();
 		this.statusBarItemEl.setText(`${t.currentHeight}: ${height.toFixed(0)}`);
+	}
+
+	private enqueuePositionPersistence(syncLegacyMap: boolean): Promise<void> {
+		return this.persistenceQueue.enqueue(async () => {
+			if (syncLegacyMap) {
+				this.positionStore.replaceFileRecords(
+					Object.fromEntries(this.settings.scrollHeightData),
+				);
+			}
+
+			const positionState = this.positionStore.snapshot();
+			this.settings.positionState = positionState;
+			this.settings.scrollHeightData = new Map(Object.entries(positionState.files));
+			await this.saveData({
+				...this.settings,
+				positionState,
+				scrollHeightData: positionState.files,
+			});
+		});
 	}
 }

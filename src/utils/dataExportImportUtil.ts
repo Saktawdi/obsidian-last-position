@@ -88,7 +88,7 @@ export class DataExportImportUtil {
                         }
                     }
                     
-                    await plugin.saveSettings();
+                    await plugin.saveLegacyPositionSettings();
                     onComplete();
                     new Notice(t.dataImported?.replace('{count}', importCount.toString()) || 
                               `Imported ${importCount} scroll position records`);

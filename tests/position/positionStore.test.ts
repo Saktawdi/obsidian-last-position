@@ -46,3 +46,13 @@ test('replaces file fallbacks without discarding persisted leaf records', () => 
 	assert.equal(store.resolve('leaf-a', 'note.md')?.height, 10);
 	assert.equal(store.resolve('leaf-b', 'note.md')?.height, 30);
 });
+
+test('uses the supplied migration time for invalid versioned timestamps', () => {
+	const state = migratePositionState({
+		version: 2,
+		files: { 'note.md': { height: 10, lastAccessed: Number.NaN } },
+		leaves: {},
+	}, undefined, 123);
+
+	assert.equal(state.files['note.md'].lastAccessed, 123);
+});

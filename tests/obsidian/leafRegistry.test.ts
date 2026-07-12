@@ -74,13 +74,16 @@ test('rebinds changed views and removes listeners for detached leaves', () => {
 	const source = new FakeLeafSource();
 	const registry = new LeafRegistry(source);
 
-	registry.reconcile(() => {});
+	const initial = registry.reconcile(() => {});
+	assert.deepEqual(initial.addedOrRebound.map(record => record.view.id), ['view-1']);
 	source.replaceView('leaf-a');
-	registry.reconcile(() => {});
+	const rebound = registry.reconcile(() => {});
+	assert.deepEqual(rebound.addedOrRebound.map(record => record.view.id), ['view-2']);
 	source.detach('leaf-a');
-	registry.reconcile(() => {});
+	const detached = registry.reconcile(() => {});
 
 	assert.deepEqual(source.removed, ['view-1', 'view-2']);
+	assert.deepEqual(detached.removedLeafIds, ['leaf-a']);
 });
 
 test('delegates scroll reads, writes, and current-state checks', () => {

@@ -57,3 +57,23 @@ test('explicit cancellation stops an active task', async () => {
 	scheduler.cancel('leaf-a');
 	assert.equal((await running).reason, 'cancelled');
 });
+
+test('stops retrying when another scroll changes the position between attempts', async () => {
+	let scroll = 0;
+	let applies = 0;
+	const scheduler = new RestorationScheduler();
+	const running = scheduler.start('leaf-a', 20, {
+		isCurrent: () => true,
+		readScroll: () => scroll,
+		applyScroll: () => {
+			applies++;
+		},
+	}, { maxAttempts: 3, intervalMs: 10 });
+
+	setTimeout(() => {
+		scroll = 7;
+	}, 2);
+
+	assert.equal((await running).reason, 'interrupted');
+	assert.equal(applies, 1);
+});

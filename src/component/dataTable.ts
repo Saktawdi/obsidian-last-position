@@ -114,7 +114,7 @@ export class DataTable {
                     const confirmed = await confirmModal.openAndAwait();
                     if (confirmed) {
                         this.plugin.settings.scrollHeightData.delete(filename);
-                        await this.plugin.saveSettings();
+                        await this.plugin.saveLegacyPositionSettings();
                         this.onDataChanged(); // 通知父组件数据已更改
                     }
                 });

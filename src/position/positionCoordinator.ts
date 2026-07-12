@@ -46,24 +46,25 @@ export class PositionCoordinator<TLeaf, TView> {
 
 	start(activeLeaf: TLeaf | null): void {
 		const active = this.options.registry.describe(activeLeaf);
-		const records = this.options.registry.reconcile(record => this.handleScroll(record));
-		for (const record of records) {
-			if (record.leafId !== active?.leafId) this.scheduleRestore(record);
+		const result = this.options.registry.reconcile(record => this.handleScroll(record));
+		for (const record of result.addedOrRebound) {
+			if (record.leafId !== active?.leafId) this.scheduleRestore(record, false);
 		}
 		this.handleActiveLeafChange(activeLeaf);
 	}
 
 	reconcile(restoreExisting = true): void {
-		const records = this.options.registry.reconcile(record => this.handleScroll(record));
+		const result = this.options.registry.reconcile(record => this.handleScroll(record));
+		for (const leafId of result.removedLeafIds) this.cancelRestore(leafId);
 		if (!restoreExisting) return;
-		for (const record of records) this.scheduleRestore(record);
+		for (const record of result.addedOrRebound) this.scheduleRestore(record, false);
 	}
 
 	handleActiveLeafChange(leaf: TLeaf | null): void {
 		if (this.activeRecord) this.saveRecord(this.activeRecord);
 		this.options.registry.reconcile(record => this.handleScroll(record));
 		this.activeRecord = this.options.registry.describe(leaf);
-		if (this.activeRecord) this.scheduleRestore(this.activeRecord);
+		if (this.activeRecord) this.scheduleRestore(this.activeRecord, true);
 	}
 
 	handleFileOpen(leaf: TLeaf | null): void {
@@ -76,7 +77,7 @@ export class PositionCoordinator<TLeaf, TView> {
 			this.saveRecord(this.activeRecord);
 		}
 		this.activeRecord = record;
-		this.scheduleRestore(record);
+		this.scheduleRestore(record, true);
 	}
 
 	markAnchorNavigation(filePath: string): void {
@@ -144,9 +145,9 @@ export class PositionCoordinator<TLeaf, TView> {
 		this.queuePersist();
 	}
 
-	private scheduleRestore(record: RegisteredLeaf<TLeaf, TView>): void {
+	private scheduleRestore(record: RegisteredLeaf<TLeaf, TView>, consumeSuppression: boolean): void {
 		this.cancelRestore(record.leafId);
-		if (this.options.anchorSuppression.consume(record.filePath)) return;
+		if (consumeSuppression && this.options.anchorSuppression.consume(record.filePath)) return;
 
 		const saved = this.options.store.resolve(record.leafId, record.filePath);
 		if (!saved) return;

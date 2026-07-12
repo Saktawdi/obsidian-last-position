@@ -45,7 +45,7 @@ function cloneState(state: PositionState): PositionState {
 	};
 }
 
-function readVersionedState(value: unknown): PositionState | undefined {
+function readVersionedState(value: unknown, now: number): PositionState | undefined {
 	if (!value || typeof value !== 'object') return undefined;
 
 	const candidate = value as Partial<PositionState>;
@@ -56,7 +56,7 @@ function readVersionedState(value: unknown): PositionState | undefined {
 		if (!record || !isValidHeight(record.height)) continue;
 		state.files[path] = {
 			height: record.height,
-			lastAccessed: normalizeTimestamp(record.lastAccessed, Date.now()),
+			lastAccessed: normalizeTimestamp(record.lastAccessed, now),
 		};
 	}
 
@@ -65,7 +65,7 @@ function readVersionedState(value: unknown): PositionState | undefined {
 		state.leaves[leafId] = {
 			filePath: record.filePath,
 			height: record.height,
-			lastAccessed: normalizeTimestamp(record.lastAccessed, Date.now()),
+			lastAccessed: normalizeTimestamp(record.lastAccessed, now),
 		};
 	}
 
@@ -77,7 +77,7 @@ export function migratePositionState(
 	legacy: unknown,
 	now = Date.now(),
 ): PositionState {
-	const versioned = readVersionedState(state);
+	const versioned = readVersionedState(state, now);
 	if (versioned) return versioned;
 
 	const migrated = emptyPositionState();

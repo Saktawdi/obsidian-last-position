@@ -4,7 +4,7 @@ export interface RestorationTarget {
 	applyScroll(height: number): void;
 }
 
-export type RestorationReason = 'completed' | 'cancelled' | 'stale' | 'expired';
+export type RestorationReason = 'completed' | 'cancelled' | 'stale' | 'interrupted' | 'expired';
 
 export interface RestorationResult {
 	reason: RestorationReason;
@@ -41,6 +41,7 @@ export class RestorationScheduler {
 		const tolerance = options.tolerance ?? 1;
 		let attempts = 0;
 		let actualHeight = target.readScroll();
+		let lastAppliedHeight: number | undefined;
 
 		try {
 			while (attempts < maxAttempts) {
@@ -49,6 +50,15 @@ export class RestorationScheduler {
 				}
 				if (!target.isCurrent()) {
 					return { reason: 'stale', attempts, actualHeight };
+				}
+
+				actualHeight = target.readScroll();
+				if (attempts > 0
+					&& lastAppliedHeight !== undefined
+					&& actualHeight !== undefined
+					&& Math.abs(actualHeight - lastAppliedHeight) > tolerance
+					&& Math.abs(actualHeight - height) > tolerance) {
+					return { reason: 'interrupted', attempts, actualHeight };
 				}
 				if (this.isWithinTolerance(actualHeight, height, tolerance)) {
 					return { reason: 'completed', attempts, actualHeight };
@@ -62,6 +72,7 @@ export class RestorationScheduler {
 				}
 				attempts++;
 				actualHeight = target.readScroll();
+				lastAppliedHeight = actualHeight;
 
 				if (this.isWithinTolerance(actualHeight, height, tolerance)) {
 					return { reason: 'completed', attempts, actualHeight };

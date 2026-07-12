@@ -20,6 +20,12 @@ interface LeafBinding<TLeaf, TView> {
 	unbind: () => void;
 }
 
+export interface ReconcileResult<TLeaf, TView> {
+	records: RegisteredLeaf<TLeaf, TView>[];
+	addedOrRebound: RegisteredLeaf<TLeaf, TView>[];
+	removedLeafIds: string[];
+}
+
 export class LeafRegistry<TLeaf = unknown, TView = unknown> {
 	private readonly bindings = new Map<string, LeafBinding<TLeaf, TView>>();
 
@@ -45,9 +51,11 @@ export class LeafRegistry<TLeaf = unknown, TView = unknown> {
 		this.source.applyScroll(record, height);
 	}
 
-	reconcile(onScroll: (record: RegisteredLeaf<TLeaf, TView>) => void): RegisteredLeaf<TLeaf, TView>[] {
+	reconcile(onScroll: (record: RegisteredLeaf<TLeaf, TView>) => void): ReconcileResult<TLeaf, TView> {
 		const records = this.source.all();
 		const activeLeafIds = new Set(records.map(record => record.leafId));
+		const addedOrRebound: RegisteredLeaf<TLeaf, TView>[] = [];
+		const removedLeafIds: string[] = [];
 
 		for (const record of records) {
 			const existing = this.bindings.get(record.leafId);
@@ -64,15 +72,17 @@ export class LeafRegistry<TLeaf = unknown, TView = unknown> {
 			};
 			binding.unbind = this.source.bindScroll(record, () => onScroll(binding.record));
 			this.bindings.set(record.leafId, binding);
+			addedOrRebound.push(record);
 		}
 
 		for (const [leafId, binding] of this.bindings) {
 			if (activeLeafIds.has(leafId)) continue;
 			binding.unbind();
 			this.bindings.delete(leafId);
+			removedLeafIds.push(leafId);
 		}
 
-		return records;
+		return { records, addedOrRebound, removedLeafIds };
 	}
 
 	dispose(): void {
