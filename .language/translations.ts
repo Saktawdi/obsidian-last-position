@@ -19,6 +19,9 @@ export interface Translation {
     retryCount: string;
     retryCountDesc: string;
     inputRetryCount: string;
+    restoreDelay: string;
+    restoreDelayDesc: string;
+    inputRestoreDelay: string;
     listenEvent: string;
     listenEventDesc: string;
     mouseOver: string;
@@ -76,6 +79,9 @@ export const TRANSLATIONS: Record<string, Translation> = {
         retryCount: '重试次数',
         retryCountDesc: '设置重试策略的最大重试次数，默认为30次。⚠请谨慎更改！',
         inputRetryCount: '输入重试次数',
+        restoreDelay: '恢复延迟',
+        restoreDelayDesc: '打开笔记后等待多少毫秒再恢复位置，默认300毫秒',
+        inputRestoreDelay: '输入恢复延迟（毫秒）',
         listenEvent: '监听事件',
         listenEventDesc: '设置监听事件用于触发滚动高度保存，默认为mouseover',
         mouseOver: '鼠标悬停(mouseover)',
@@ -130,6 +136,9 @@ export const TRANSLATIONS: Record<string, Translation> = {
         retryCount: 'Retry Count',
         retryCountDesc: 'Set maximum retry count for retry strategy. Default is 30. ⚠ Change with caution!',
         inputRetryCount: 'Enter retry count',
+        restoreDelay: 'Restore Delay',
+        restoreDelayDesc: 'Wait before restoring a note position, in milliseconds. Default is 300.',
+        inputRestoreDelay: 'Enter restore delay (milliseconds)',
         listenEvent: 'Listen Event',
         listenEventDesc: 'Set trigger event for saving scroll height, default is mouseover',
         mouseOver: 'Mouse Over (mouseover)',

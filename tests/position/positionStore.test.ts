@@ -36,3 +36,13 @@ test('does not return a leaf record for its previous file', () => {
 	assert.equal(store.resolve('leaf-a', 'old.md')?.height, 10);
 	assert.equal(store.resolve('leaf-a', 'new.md')?.height, 20);
 });
+
+test('replaces file fallbacks without discarding persisted leaf records', () => {
+	const store = new PositionStore();
+	store.save('leaf-a', 'note.md', 10, 1);
+
+	store.replaceFileRecords({ 'note.md': { height: 30, lastAccessed: 2 } }, 2);
+
+	assert.equal(store.resolve('leaf-a', 'note.md')?.height, 10);
+	assert.equal(store.resolve('leaf-b', 'note.md')?.height, 30);
+});

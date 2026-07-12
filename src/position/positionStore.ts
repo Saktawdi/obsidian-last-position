@@ -123,6 +123,10 @@ export class PositionStore {
 		return fileRecord ? { ...fileRecord } : undefined;
 	}
 
+	replaceFileRecords(legacy: unknown, now = Date.now()): void {
+		this.state.files = migratePositionState(undefined, legacy, now).files;
+	}
+
 	snapshot(): PositionState {
 		return cloneState(this.state);
 	}

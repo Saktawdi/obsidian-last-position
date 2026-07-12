@@ -3,12 +3,17 @@ import { getTranslation } from '.language/translations';
 import { DataTable } from './component/dataTable';
 import LastPositionPlugin from './main';
 import { DataExportImportUtil } from './utils/dataExportImportUtil';
+import { emptyPositionState, PositionState } from './position/positionStore';
 
 export interface LastPositionSettings {
 	//自动保存间隔时间,单位秒
 	myInterval: number;
 	//重试策略-重试次数最大值
 	myRetryCount: number;
+	//恢复前等待原生导航完成的时间
+	restoreDelayMs: number;
+	//版本化的文件级与标签页级位置数据
+	positionState: PositionState;
 	//数据
 	scrollHeightData: Map<string, ScrollPositionData>;
 	//监听事件
@@ -32,6 +37,8 @@ export interface ScrollPositionData {
 export const DEFAULT_SETTINGS: LastPositionSettings = {
 	myInterval: 3,
 	myRetryCount: 30,
+	restoreDelayMs: 300,
+	positionState: emptyPositionState(),
 	//数据
 	scrollHeightData: new Map<string, ScrollPositionData>(),
 	//监听事件
@@ -91,6 +98,22 @@ export class AutoSaveScrollSettingsTab  extends PluginSettingTab {
 							this.plugin.settings.myRetryCount = retryCount;
 							await this.plugin.saveSettings(); // 保存设置
 							new Notice(t.restartNotice)
+						}
+					}));
+		//恢复延迟设置
+		new Setting(containerEl)
+			.setName(t.restoreDelay)
+			.setDesc(t.restoreDelayDesc)
+			.addText((text) =>
+				text
+					.setPlaceholder(t.inputRestoreDelay)
+					.setValue(this.plugin.settings.restoreDelayMs.toString())
+					.onChange(async (value) => {
+						const delay = Number(value);
+						if (!isNaN(delay) && delay >= 0) {
+							this.plugin.settings.restoreDelayMs = delay;
+							await this.plugin.saveSettings();
+							new Notice(t.changeSuccess);
 						}
 					}));
 		//监听事件设置
