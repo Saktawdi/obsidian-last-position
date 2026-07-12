@@ -19,6 +19,8 @@
     ]
   },
   "include": [
-    "**/*.ts"
+    "src/**/*.ts",
+    ".language/**/*.ts",
+    "esbuild.config.mjs"
   ]
 }
