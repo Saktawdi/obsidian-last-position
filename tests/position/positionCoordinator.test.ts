@@ -20,6 +20,7 @@ class CoordinatorLeafSource implements LeafSource<FakeLeaf, FakeView> {
 		{ leaf: { id: 'leaf-b' }, leafId: 'leaf-b', filePath: 'b.md', view: { scroll: 0 } },
 	];
 	private readonly callbacks = new Map<string, () => void>();
+	onIsCurrent?: () => void;
 
 	describe(leaf: FakeLeaf | null): RegisteredLeaf<FakeLeaf, FakeView> | undefined {
 		return this.leaves.find(record => record.leaf === leaf);
@@ -30,6 +31,7 @@ class CoordinatorLeafSource implements LeafSource<FakeLeaf, FakeView> {
 	}
 
 	isCurrent(record: RegisteredLeaf<FakeLeaf, FakeView>): boolean {
+		this.onIsCurrent?.();
 		return this.leaves.some(candidate =>
 			candidate.leafId === record.leafId
 			&& candidate.filePath === record.filePath
@@ -62,7 +64,7 @@ function nextTurn(): Promise<void> {
 	return new Promise(resolve => setTimeout(resolve, 5));
 }
 
-function createCoordinator(source: CoordinatorLeafSource, store: PositionStore) {
+function createCoordinator(source: CoordinatorLeafSource, store: PositionStore, restoreDelayMs = 0) {
 	let persists = 0;
 	const coordinator = new PositionCoordinator({
 		registry: new LeafRegistry(source),
@@ -71,7 +73,7 @@ function createCoordinator(source: CoordinatorLeafSource, store: PositionStore) 
 		anchorSuppression: new AnchorSuppression(500),
 		maxAttempts: () => 3,
 		debounceMs: () => 0,
-		restoreDelayMs: () => 0,
+		restoreDelayMs: () => restoreDelayMs,
 		persist: async () => {
 			persists++;
 		},
@@ -163,5 +165,38 @@ test('background leaf cannot consume anchor suppression for the active destinati
 
 	assert.equal(source.leaves[0].view.scroll, 5);
 	assert.equal(source.leaves[1].view.scroll, 0);
+	await coordinator.dispose();
+});
+
+test('scrolling to zero during the restore delay cancels the pending restore', async () => {
+	const source = new CoordinatorLeafSource();
+	const store = new PositionStore();
+	store.save('leaf-a', 'a.md', 10, 1);
+	const { coordinator } = createCoordinator(source, store, 20);
+
+	coordinator.start(source.leaves[0].leaf);
+	source.scroll('leaf-a', 0);
+	await new Promise(resolve => setTimeout(resolve, 30));
+
+	assert.equal(source.leaves[0].view.scroll, 0);
+	await coordinator.dispose();
+});
+
+test('does not start a cancelled restore after its timer callback begins', async () => {
+	const source = new CoordinatorLeafSource();
+	const store = new PositionStore();
+	store.save('leaf-a', 'a.md', 10, 1);
+	const { coordinator } = createCoordinator(source, store);
+	let triggered = false;
+	source.onIsCurrent = () => {
+		if (triggered) return;
+		triggered = true;
+		source.scroll('leaf-a', 0);
+	};
+
+	coordinator.start(source.leaves[0].leaf);
+	await new Promise(resolve => setTimeout(resolve, 30));
+
+	assert.equal(source.leaves[0].view.scroll, 0);
 	await coordinator.dispose();
 });

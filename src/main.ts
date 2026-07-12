@@ -5,6 +5,7 @@ import { ObsidianLeafSource } from './obsidian/obsidianLeafSource';
 import { AnchorSuppression } from './position/anchorSuppression';
 import { PositionCoordinator } from './position/positionCoordinator';
 import { PositionStore, migratePositionState } from './position/positionStore';
+import { snapshotLegacyPositionData } from './position/legacyPositionSnapshot';
 import { RestorationScheduler } from './position/restorationScheduler';
 import { SerializedTaskQueue } from './position/serializedTaskQueue';
 import { AutoSaveScrollSettingsTab, DEFAULT_SETTINGS, LastPositionSettings } from './setting';
@@ -54,15 +55,16 @@ export default class LastPositionPlugin extends Plugin {
 	}
 
 	async saveSettings(): Promise<void> {
-		await this.enqueuePositionPersistence(false);
+		await this.enqueuePositionPersistence();
 	}
 
 	async saveLegacyPositionSettings(): Promise<void> {
-		await this.enqueuePositionPersistence(true);
+		const legacySnapshot = snapshotLegacyPositionData(this.settings.scrollHeightData);
+		await this.enqueuePositionPersistence(legacySnapshot);
 	}
 
 	async persistPositionState(): Promise<void> {
-		await this.enqueuePositionPersistence(false);
+		await this.enqueuePositionPersistence();
 	}
 
 	flashStatusBar(): void {
@@ -156,12 +158,10 @@ export default class LastPositionPlugin extends Plugin {
 		this.statusBarItemEl.setText(`${t.currentHeight}: ${height.toFixed(0)}`);
 	}
 
-	private enqueuePositionPersistence(syncLegacyMap: boolean): Promise<void> {
+	private enqueuePositionPersistence(legacySnapshot?: unknown): Promise<void> {
 		return this.persistenceQueue.enqueue(async () => {
-			if (syncLegacyMap) {
-				this.positionStore.replaceFileRecords(
-					Object.fromEntries(this.settings.scrollHeightData),
-				);
+			if (legacySnapshot !== undefined) {
+				this.positionStore.replaceFileRecords(legacySnapshot);
 			}
 
 			const positionState = this.positionStore.snapshot();

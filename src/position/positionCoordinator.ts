@@ -110,7 +110,7 @@ export class PositionCoordinator<TLeaf, TView> {
 		if (height === undefined || !Number.isFinite(height) || height < 0) return;
 
 		this.options.updateStatus(height);
-		if (height > 0) this.cancelRestore(record.leafId);
+		this.cancelRestore(record.leafId);
 		this.scheduleSave(record, height);
 	}
 
@@ -155,8 +155,10 @@ export class PositionCoordinator<TLeaf, TView> {
 		const run = (this.restorationRuns.get(record.leafId) ?? 0) + 1;
 		this.restorationRuns.set(record.leafId, run);
 		const timer = globalThis.setTimeout(() => {
+			if (this.disposed || this.restorationRuns.get(record.leafId) !== run) return;
 			this.restoreTimers.delete(record.leafId);
 			if (!this.options.registry.isCurrent(record)) return;
+			if (this.disposed || this.restorationRuns.get(record.leafId) !== run) return;
 			this.restoring.add(record.leafId);
 			void this.options.scheduler.start(record.leafId, saved.height, {
 				isCurrent: () => this.options.registry.isCurrent(record),
