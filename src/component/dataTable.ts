@@ -2,8 +2,7 @@ import { App } from 'obsidian';
 import { getTranslation } from '.language/translations';
 import { ConfirmModal } from './confirmedModal';
 import LastPositionPlugin from 'src/main';
-import { ScrollPositionData } from 'src/setting';
-import { DataExportImportUtil } from 'src/utils/dataExportImportUtil';
+import type { ScrollPositionRecord } from 'src/position/positionStore';
 
 export interface DataTableOptions {
     containerEl: HTMLElement;
@@ -37,9 +36,10 @@ export class DataTable {
         const dataSection = this.containerEl.createDiv('data-table-section');
         dataSection.createEl('h3', { text: t.scrollData });
         dataSection.createEl('p', { text: t.scrollDataDesc });
+        let entries = Object.entries(this.plugin.positionStore.snapshot().files);
 
         // 创建表格
-        if (this.plugin.settings.scrollHeightData.size > 0) {
+        if (entries.length > 0) {
             const tableContainer = dataSection.createDiv('table-container');
             // 设置表格容器最大高度和滚动
             tableContainer.style.maxHeight = '300px';
@@ -74,7 +74,6 @@ export class DataTable {
             tbody.style.padding = '20px';
             
             // 分页逻辑
-            let entries = Array.from(this.plugin.settings.scrollHeightData.entries());
             // 根据当前排序字段和方向排序
             entries = this.sortEntries(entries);
 
@@ -113,8 +112,8 @@ export class DataTable {
                     const confirmModal = new ConfirmModal(this.app, {message: t.confirmClearMessage + '-[' + filename + ']'});
                     const confirmed = await confirmModal.openAndAwait();
                     if (confirmed) {
-                        this.plugin.settings.scrollHeightData.delete(filename);
-                        await this.plugin.saveLegacyPositionSettings();
+                        this.plugin.positionStore.deleteFile(filename);
+                        await this.plugin.persistPositionState();
                         this.onDataChanged(); // 通知父组件数据已更改
                     }
                 });
@@ -195,7 +194,7 @@ export class DataTable {
     }
 
     // 根据当前排序设置对条目进行排序
-    private sortEntries(entries: [string, ScrollPositionData][]): [string, ScrollPositionData][] {
+    private sortEntries(entries: [string, ScrollPositionRecord][]): [string, ScrollPositionRecord][] {
         return entries.sort((a, b) => {
             let result: number;
             

@@ -89,16 +89,16 @@ export default class LastPositionPlugin extends Plugin {
 
 		const cutoffTime = Date.now() - (this.settings.cleanupDays * 24 * 60 * 60 * 1000);
 		let cleanedCount = 0;
-		for (const [path, data] of this.settings.scrollHeightData.entries()) {
+		for (const [path, data] of Object.entries(this.positionStore.snapshot().files)) {
 			if (data.lastAccessed && data.lastAccessed < cutoffTime) {
-				this.settings.scrollHeightData.delete(path);
+				this.positionStore.deleteFile(path);
 				cleanedCount++;
 			}
 		}
 
 		if (cleanedCount > 0) {
 			console.log(`[Last-Position-Plugin]: Cleaned up ${cleanedCount} old entries`);
-			void this.saveLegacyPositionSettings();
+			void this.persistPositionState();
 		}
 	}
 
@@ -139,7 +139,7 @@ export default class LastPositionPlugin extends Plugin {
 			coordinator.handleFileOpen(this.app.workspace.activeLeaf);
 		}));
 		this.registerEvent(this.app.workspace.on('layout-change', () => {
-			coordinator.reconcile(true);
+			coordinator.reconcile();
 		}));
 		this.registerDomEvent(document, 'click', event => this.handleInternalLinkClick(event), true);
 	}

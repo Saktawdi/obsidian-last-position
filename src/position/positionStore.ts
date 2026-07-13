@@ -127,6 +127,17 @@ export class PositionStore {
 		this.state.files = migratePositionState(undefined, legacy, now).files;
 	}
 
+	deleteFile(filePath: string): boolean {
+		let deleted = Object.prototype.hasOwnProperty.call(this.state.files, filePath);
+		if (deleted) delete this.state.files[filePath];
+		for (const [leafId, record] of Object.entries(this.state.leaves)) {
+			if (record.filePath !== filePath) continue;
+			delete this.state.leaves[leafId];
+			deleted = true;
+		}
+		return deleted;
+	}
+
 	snapshot(): PositionState {
 		return cloneState(this.state);
 	}

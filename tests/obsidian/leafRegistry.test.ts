@@ -4,6 +4,7 @@ import {
 	LeafRegistry,
 	type LeafSource,
 	type RegisteredLeaf,
+	type ScrollEventDetails,
 } from '../../src/obsidian/leafRegistry';
 
 interface FakeLeaf {
@@ -15,8 +16,10 @@ interface FakeView {
 	scroll: number;
 }
 
+type TestRecord = RegisteredLeaf<FakeLeaf, FakeView> & { viewKey: string };
+
 class FakeLeafSource implements LeafSource<FakeLeaf, FakeView> {
-	private records: RegisteredLeaf<FakeLeaf, FakeView>[] = [];
+	private records: TestRecord[] = [];
 	readonly removed: string[] = [];
 
 	constructor() {
@@ -33,7 +36,9 @@ class FakeLeafSource implements LeafSource<FakeLeaf, FakeView> {
 
 	isCurrent(record: RegisteredLeaf<FakeLeaf, FakeView>): boolean {
 		return this.records.some(candidate =>
-			candidate.leafId === record.leafId && candidate.view === record.view,
+			candidate.leafId === record.leafId
+			&& candidate.view === record.view
+			&& candidate.viewKey === record.viewKey,
 		);
 	}
 
@@ -45,9 +50,18 @@ class FakeLeafSource implements LeafSource<FakeLeaf, FakeView> {
 		record.view.scroll = height;
 	}
 
-	bindScroll(record: RegisteredLeaf<FakeLeaf, FakeView>, callback: () => void): () => void {
+	bindScroll(
+		record: RegisteredLeaf<FakeLeaf, FakeView>,
+		callback: (details: ScrollEventDetails) => void,
+	): () => void {
 		void callback;
 		return () => this.removed.push(record.view.id);
+	}
+
+	bindViewChange(record: RegisteredLeaf<FakeLeaf, FakeView>, callback: () => void): () => void {
+		void record;
+		void callback;
+		return () => {};
 	}
 
 	replaceView(leafId: string): void {
@@ -56,16 +70,29 @@ class FakeLeafSource implements LeafSource<FakeLeaf, FakeView> {
 			: record);
 	}
 
+	replaceViewKey(leafId: string): void {
+		this.records = this.records.map(record => record.leafId === leafId
+			? { ...record, viewKey: 'mode-2' }
+			: record);
+	}
+
+	replaceFilePath(leafId: string): void {
+		this.records = this.records.map(record => record.leafId === leafId
+			? { ...record, filePath: 'other.md' }
+			: record);
+	}
+
 	detach(leafId: string): void {
 		this.records = this.records.filter(record => record.leafId !== leafId);
 	}
 
-	private createRecord(leafId: string, viewId: string): RegisteredLeaf<FakeLeaf, FakeView> {
+	private createRecord(leafId: string, viewId: string): TestRecord {
 		return {
 			leaf: { id: leafId },
 			leafId,
 			filePath: 'note.md',
 			view: { id: viewId, scroll: 0 },
+			viewKey: 'mode-1',
 		};
 	}
 }
@@ -97,4 +124,28 @@ test('delegates scroll reads, writes, and current-state checks', () => {
 
 	source.replaceView('leaf-a');
 	assert.equal(registry.isCurrent(record), false);
+});
+
+test('rebinds when the rendering mode changes without replacing the Markdown view', () => {
+	const source = new FakeLeafSource();
+	const registry = new LeafRegistry(source);
+
+	registry.reconcile(() => {});
+	source.replaceViewKey('leaf-a');
+	const rebound = registry.reconcile(() => {});
+
+	assert.equal(rebound.addedOrRebound.length, 1);
+	assert.equal((rebound.addedOrRebound[0] as TestRecord).viewKey, 'mode-2');
+});
+
+test('rebinds when the same Markdown view opens another file', () => {
+	const source = new FakeLeafSource();
+	const registry = new LeafRegistry(source);
+
+	registry.reconcile(() => {});
+	source.replaceFilePath('leaf-a');
+	const rebound = registry.reconcile(() => {});
+
+	assert.equal(rebound.addedOrRebound.length, 1);
+	assert.equal(rebound.addedOrRebound[0].filePath, 'other.md');
 });

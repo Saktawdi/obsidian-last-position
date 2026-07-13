@@ -1,7 +1,20 @@
 import { App, MarkdownView, WorkspaceLeaf } from 'obsidian';
-import { LeafSource, RegisteredLeaf } from './leafRegistry';
+import { LeafSource, RegisteredLeaf, ScrollEventDetails } from './leafRegistry';
 
 type RuntimeLeaf = WorkspaceLeaf & { id?: string };
+
+const USER_SCROLL_INTENT_TTL_MS = 500;
+const SCROLL_KEYS = new Set([
+	'ArrowDown',
+	'ArrowLeft',
+	'ArrowRight',
+	'ArrowUp',
+	'End',
+	'Home',
+	'PageDown',
+	'PageUp',
+	' ',
+]);
 
 export class ObsidianLeafSource implements LeafSource<WorkspaceLeaf, MarkdownView> {
 	private readonly fallbackIds = new WeakMap<WorkspaceLeaf, string>();
@@ -17,6 +30,7 @@ export class ObsidianLeafSource implements LeafSource<WorkspaceLeaf, MarkdownVie
 			leafId: this.getLeafId(leaf),
 			filePath: leaf.view.file.path,
 			view: leaf.view,
+			viewKey: leaf.view.getMode(),
 		};
 	}
 
@@ -33,7 +47,8 @@ export class ObsidianLeafSource implements LeafSource<WorkspaceLeaf, MarkdownVie
 		const current = this.describe(record.leaf);
 		return current?.leafId === record.leafId
 			&& current.filePath === record.filePath
-			&& current.view === record.view;
+			&& current.view === record.view
+			&& current.viewKey === record.viewKey;
 	}
 
 	readScroll(record: RegisteredLeaf<WorkspaceLeaf, MarkdownView>): number | undefined {
@@ -48,11 +63,53 @@ export class ObsidianLeafSource implements LeafSource<WorkspaceLeaf, MarkdownVie
 
 	bindScroll(
 		record: RegisteredLeaf<WorkspaceLeaf, MarkdownView>,
-		callback: () => void,
+		callback: (details: ScrollEventDetails) => void,
 	): () => void {
 		const options: AddEventListenerOptions = { capture: true, passive: true };
-		record.view.containerEl.addEventListener('scroll', callback, options);
-		return () => record.view.containerEl.removeEventListener('scroll', callback, true);
+		let userIntentExpiresAt = 0;
+		const markUserIntent = () => {
+			userIntentExpiresAt = Date.now() + USER_SCROLL_INTENT_TTL_MS;
+		};
+		const handleKeydown = (event: KeyboardEvent) => {
+			if (SCROLL_KEYS.has(event.key)) markUserIntent();
+		};
+		const handleScroll = () => {
+			const userInitiated = Date.now() <= userIntentExpiresAt;
+			callback({ userInitiated });
+		};
+		const container = record.view.containerEl;
+
+		container.addEventListener('scroll', handleScroll, options);
+		container.addEventListener('wheel', markUserIntent, options);
+		container.addEventListener('touchstart', markUserIntent, options);
+		container.addEventListener('pointerdown', markUserIntent, options);
+		container.addEventListener('keydown', handleKeydown, true);
+
+		return () => {
+			container.removeEventListener('scroll', handleScroll, true);
+			container.removeEventListener('wheel', markUserIntent, true);
+			container.removeEventListener('touchstart', markUserIntent, true);
+			container.removeEventListener('pointerdown', markUserIntent, true);
+			container.removeEventListener('keydown', handleKeydown, true);
+		};
+	}
+
+	bindViewChange(
+		record: RegisteredLeaf<WorkspaceLeaf, MarkdownView>,
+		callback: () => void,
+	): () => void {
+		// Obsidian exposes no public Markdown mode-change event.
+		const observer = new MutationObserver(() => {
+			if (!this.isCurrent(record)) callback();
+		});
+		observer.observe(record.view.containerEl, {
+			attributes: true,
+			attributeFilter: ['class'],
+			childList: true,
+			subtree: true,
+		});
+
+		return () => observer.disconnect();
 	}
 
 	private getLeafId(leaf: WorkspaceLeaf): string {

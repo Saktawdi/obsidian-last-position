@@ -47,6 +47,27 @@ test('replaces file fallbacks without discarding persisted leaf records', () => 
 	assert.equal(store.resolve('leaf-b', 'note.md')?.height, 30);
 });
 
+test('deletes a file fallback and every leaf record associated with the file', () => {
+	const store = new PositionStore();
+	store.save('leaf-a', 'note.md', 10, 1);
+	store.save('leaf-b', 'note.md', 20, 2);
+	store.save('leaf-c', 'other.md', 30, 3);
+
+	assert.equal(store.deleteFile('note.md'), true);
+
+	const state = store.snapshot();
+	assert.equal(state.files['note.md'], undefined);
+	assert.equal(state.leaves['leaf-a'], undefined);
+	assert.equal(state.leaves['leaf-b'], undefined);
+	assert.deepEqual(state.files['other.md'], { height: 30, lastAccessed: 3 });
+	assert.deepEqual(state.leaves['leaf-c'], {
+		filePath: 'other.md',
+		height: 30,
+		lastAccessed: 3,
+	});
+	assert.equal(store.deleteFile('missing.md'), false);
+});
+
 test('uses the supplied migration time for invalid versioned timestamps', () => {
 	const state = migratePositionState({
 		version: 2,

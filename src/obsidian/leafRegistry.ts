@@ -3,6 +3,11 @@ export interface RegisteredLeaf<TLeaf = unknown, TView = unknown> {
 	leafId: string;
 	filePath: string;
 	view: TView;
+	viewKey: unknown;
+}
+
+export interface ScrollEventDetails {
+	userInitiated: boolean;
 }
 
 export interface LeafSource<TLeaf = unknown, TView = unknown> {
@@ -11,12 +16,18 @@ export interface LeafSource<TLeaf = unknown, TView = unknown> {
 	isCurrent(record: RegisteredLeaf<TLeaf, TView>): boolean;
 	readScroll(record: RegisteredLeaf<TLeaf, TView>): number | undefined;
 	applyScroll(record: RegisteredLeaf<TLeaf, TView>, height: number): void;
-	bindScroll(record: RegisteredLeaf<TLeaf, TView>, callback: () => void): () => void;
+	bindScroll(
+		record: RegisteredLeaf<TLeaf, TView>,
+		callback: (details: ScrollEventDetails) => void,
+	): () => void;
+	bindViewChange(record: RegisteredLeaf<TLeaf, TView>, callback: () => void): () => void;
 }
 
 interface LeafBinding<TLeaf, TView> {
 	record: RegisteredLeaf<TLeaf, TView>;
+	filePath: string;
 	view: TView;
+	viewKey: unknown;
 	unbind: () => void;
 }
 
@@ -51,7 +62,10 @@ export class LeafRegistry<TLeaf = unknown, TView = unknown> {
 		this.source.applyScroll(record, height);
 	}
 
-	reconcile(onScroll: (record: RegisteredLeaf<TLeaf, TView>) => void): ReconcileResult<TLeaf, TView> {
+	reconcile(
+		onScroll: (record: RegisteredLeaf<TLeaf, TView>, details: ScrollEventDetails) => void,
+		onViewChange: (record: RegisteredLeaf<TLeaf, TView>) => void = () => {},
+	): ReconcileResult<TLeaf, TView> {
 		const records = this.source.all();
 		const activeLeafIds = new Set(records.map(record => record.leafId));
 		const addedOrRebound: RegisteredLeaf<TLeaf, TView>[] = [];
@@ -59,7 +73,9 @@ export class LeafRegistry<TLeaf = unknown, TView = unknown> {
 
 		for (const record of records) {
 			const existing = this.bindings.get(record.leafId);
-			if (existing?.view === record.view) {
+			if (existing?.filePath === record.filePath
+				&& existing.view === record.view
+				&& existing.viewKey === record.viewKey) {
 				existing.record = record;
 				continue;
 			}
@@ -67,10 +83,23 @@ export class LeafRegistry<TLeaf = unknown, TView = unknown> {
 			existing?.unbind();
 			const binding: LeafBinding<TLeaf, TView> = {
 				record,
+				filePath: record.filePath,
 				view: record.view,
+				viewKey: record.viewKey,
 				unbind: () => {},
 			};
-			binding.unbind = this.source.bindScroll(record, () => onScroll(binding.record));
+			const unbindScroll = this.source.bindScroll(
+				record,
+				details => onScroll(binding.record, details),
+			);
+			const unbindViewChange = this.source.bindViewChange(
+				record,
+				() => onViewChange(binding.record),
+			);
+			binding.unbind = () => {
+				unbindScroll();
+				unbindViewChange();
+			};
 			this.bindings.set(record.leafId, binding);
 			addedOrRebound.push(record);
 		}
