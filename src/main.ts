@@ -8,6 +8,7 @@ import { PositionStore, migratePositionState } from './position/positionStore';
 import { snapshotLegacyPositionData } from './position/legacyPositionSnapshot';
 import { RestorationScheduler } from './position/restorationScheduler';
 import { SerializedTaskQueue } from './position/serializedTaskQueue';
+import { ParsedSettingsData, parseSettingsData } from './position/settingsData';
 import { AutoSaveScrollSettingsTab, DEFAULT_SETTINGS, LastPositionSettings } from './setting';
 
 export default class LastPositionPlugin extends Plugin {
@@ -39,7 +40,7 @@ export default class LastPositionPlugin extends Plugin {
 	}
 
 	async loadSettings(): Promise<void> {
-		const loadedData = (await this.loadData()) || {};
+		const { data: loadedData, shouldRepair } = await this.readSettingsData();
 		const positionState = migratePositionState(
 			loadedData.positionState,
 			loadedData.scrollHeightData,
@@ -52,6 +53,14 @@ export default class LastPositionPlugin extends Plugin {
 			scrollHeightData: new Map(Object.entries(positionState.files)),
 		};
 		this.positionStore = new PositionStore(positionState);
+
+		if (shouldRepair) {
+			try {
+				await this.persistPositionState();
+			} catch (error) {
+				console.error('[Last-Position-Plugin]: Failed to repair settings data', error);
+			}
+		}
 	}
 
 	async saveSettings(): Promise<void> {
@@ -156,6 +165,22 @@ export default class LastPositionPlugin extends Plugin {
 	private updateStatusBar(height: number): void {
 		const t = getTranslation();
 		this.statusBarItemEl.setText(`${t.currentHeight}: ${height.toFixed(0)}`);
+	}
+
+	private async readSettingsData(): Promise<ParsedSettingsData> {
+		const pluginDirectory = this.manifest.dir
+			?? `${this.app.vault.configDir}/plugins/${this.manifest.id}`;
+		const dataPath = `${pluginDirectory}/data.json`;
+
+		try {
+			const parsed = parseSettingsData(await this.app.vault.adapter.read(dataPath));
+			if (parsed.shouldRepair) {
+				console.warn(`[Last-Position-Plugin]: Invalid settings JSON at ${dataPath}; resetting it.`);
+			}
+			return parsed;
+		} catch {
+			return { data: {}, shouldRepair: false };
+		}
 	}
 
 	private enqueuePositionPersistence(legacySnapshot?: unknown): Promise<void> {
