@@ -27,13 +27,30 @@ function isValidHeight(height: unknown): height is number {
 	return typeof height === 'number' && Number.isFinite(height) && height >= 0;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isValidPath(path: string): boolean {
+	return path.trim().length > 0 && !path.includes('\0');
+}
+
+function setOwn<T>(target: Record<string, T>, key: string, value: T): void {
+	Object.defineProperty(target, key, {
+		configurable: true,
+		enumerable: true,
+		value,
+		writable: true,
+	});
+}
+
 function normalizeTimestamp(value: unknown, fallback: number): number {
 	return typeof value === 'number' && Number.isFinite(value) && value >= 0
 		? value
 		: fallback;
 }
 
-function cloneState(state: PositionState): PositionState {
+export function clonePositionState(state: PositionState): PositionState {
 	return {
 		version: 2,
 		files: Object.fromEntries(
@@ -45,28 +62,48 @@ function cloneState(state: PositionState): PositionState {
 	};
 }
 
+export function mergePositionStates(current: PositionState, incoming: PositionState): PositionState {
+	return {
+		version: 2,
+		files: {
+			...current.files,
+			...incoming.files,
+		},
+		leaves: {
+			...current.leaves,
+			...incoming.leaves,
+		},
+	};
+}
+
 function readVersionedState(value: unknown, now: number): PositionState | undefined {
 	if (!value || typeof value !== 'object') return undefined;
 
 	const candidate = value as Partial<PositionState>;
-	if (candidate.version !== 2 || !candidate.files || !candidate.leaves) return undefined;
+	if (candidate.version !== 2 || !isRecord(candidate.files) || !isRecord(candidate.leaves)) {
+		return undefined;
+	}
 
 	const state = emptyPositionState();
 	for (const [path, record] of Object.entries(candidate.files)) {
-		if (!record || !isValidHeight(record.height)) continue;
-		state.files[path] = {
+		if (!isValidPath(path) || !isRecord(record) || !isValidHeight(record.height)) continue;
+		setOwn(state.files, path, {
 			height: record.height,
 			lastAccessed: normalizeTimestamp(record.lastAccessed, now),
-		};
+		});
 	}
 
 	for (const [leafId, record] of Object.entries(candidate.leaves)) {
-		if (!record || typeof record.filePath !== 'string' || !isValidHeight(record.height)) continue;
-		state.leaves[leafId] = {
+		if (!isValidPath(leafId)
+			|| !isRecord(record)
+			|| typeof record.filePath !== 'string'
+			|| !isValidPath(record.filePath)
+			|| !isValidHeight(record.height)) continue;
+		setOwn(state.leaves, leafId, {
 			filePath: record.filePath,
 			height: record.height,
 			lastAccessed: normalizeTimestamp(record.lastAccessed, now),
-		};
+		});
 	}
 
 	return state;
@@ -84,16 +121,17 @@ export function migratePositionState(
 	if (!legacy || typeof legacy !== 'object') return migrated;
 
 	for (const [path, value] of Object.entries(legacy as LegacyPositionData)) {
+		if (!isValidPath(path)) continue;
 		if (isValidHeight(value)) {
-			migrated.files[path] = { height: value, lastAccessed: now };
+			setOwn(migrated.files, path, { height: value, lastAccessed: now });
 			continue;
 		}
 
-		if (!value || typeof value !== 'object' || !isValidHeight(value.height)) continue;
-		migrated.files[path] = {
+		if (!isRecord(value) || !isValidHeight(value.height)) continue;
+		setOwn(migrated.files, path, {
 			height: value.height,
 			lastAccessed: normalizeTimestamp(value.lastAccessed, now),
-		};
+		});
 	}
 
 	return migrated;
@@ -103,7 +141,7 @@ export class PositionStore {
 	private state: PositionState;
 
 	constructor(state: PositionState = emptyPositionState()) {
-		this.state = cloneState(state);
+		this.state = clonePositionState(state);
 	}
 
 	save(leafId: string, filePath: string, height: number, now = Date.now()): boolean {
@@ -127,6 +165,10 @@ export class PositionStore {
 		this.state.files = migratePositionState(undefined, legacy, now).files;
 	}
 
+	merge(incoming: PositionState): void {
+		this.state = mergePositionStates(this.state, incoming);
+	}
+
 	deleteFile(filePath: string): boolean {
 		let deleted = Object.prototype.hasOwnProperty.call(this.state.files, filePath);
 		if (deleted) delete this.state.files[filePath];
@@ -139,6 +181,6 @@ export class PositionStore {
 	}
 
 	snapshot(): PositionState {
-		return cloneState(this.state);
+		return clonePositionState(this.state);
 	}
 }

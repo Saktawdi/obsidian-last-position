@@ -1,38 +1,32 @@
 import { Notice } from 'obsidian';
 import { getTranslation } from '.language/translations';
 import LastPositionPlugin from 'src/main';
-import { ScrollPositionData } from 'src/setting';
+import { parsePositionExport, serializePositionState } from '../position/positionDataTransfer';
 
 export class DataExportImportUtil {
     /**
-     * 导出滚动位置数据到文本文件
+     * 导出滚动位置数据到版本化 JSON 文件
      * @param plugin 插件实例
      */
     static exportData(plugin: LastPositionPlugin): void {
         const t = getTranslation();
-        if (plugin.settings.scrollHeightData.size === 0) {
+        const positionState = plugin.positionStore.snapshot();
+        if (Object.keys(positionState.files).length === 0
+            && Object.keys(positionState.leaves).length === 0) {
             new Notice(t.noDataToExport);
             return;
         }
 
-        // 将Map转换为JSON
-        const dataToExport = Array.from(plugin.settings.scrollHeightData.entries())
-            .map(([filename, data]) => ({
-                filename,
-                height: data.height,
-                lastAccessed: data.lastAccessed
-            }));
-        
-        const jsonString = JSON.stringify(dataToExport, null, 2);
+        const jsonString = serializePositionState(positionState);
         
         // 创建Blob和下载链接
-        const blob = new Blob([jsonString], { type: 'text/plain' });
+        const blob = new Blob([jsonString], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         
         // 创建临时链接并触发下载
         const downloadLink = document.createElement('a');
         downloadLink.href = url;
-        downloadLink.download = `obsidian-last-position-export-${new Date().toISOString().slice(0, 10)}.txt`;
+        downloadLink.download = `obsidian-last-position-export-${new Date().toISOString().slice(0, 10)}.json`;
         document.body.appendChild(downloadLink);
         downloadLink.click();
         
@@ -44,7 +38,7 @@ export class DataExportImportUtil {
     }
 
     /**
-     * 从文本文件导入滚动位置数据
+     * 从版本化 JSON 或旧版 TXT 文件导入滚动位置数据
      * @param plugin 插件实例
      * @param onComplete 导入完成后的回调函数
      */
@@ -54,7 +48,7 @@ export class DataExportImportUtil {
         // 创建文件输入元素
         const fileInput = document.createElement('input');
         fileInput.type = 'file';
-        fileInput.accept = '.txt,text/plain';
+        fileInput.accept = '.json,.txt,application/json,text/plain';
         
         fileInput.addEventListener('change', async (event) => {
             const target = event.target as HTMLInputElement;
@@ -70,28 +64,11 @@ export class DataExportImportUtil {
             reader.onload = async (e) => {
                 try {
                     const content = e.target?.result as string;
-                    const importedData = JSON.parse(content);
-                    
-                    if (!Array.isArray(importedData)) {
-                        throw new Error('无效的数据格式');
-                    }
-                    
-                    // 处理导入的数据
-                    let importCount = 0;
-                    for (const item of importedData) {
-                        if (item.filename && (item.height !== undefined || item.lastAccessed)) {
-                            plugin.settings.scrollHeightData.set(item.filename, {
-                                height: item.height,
-                                lastAccessed: item.lastAccessed || Date.now()
-                            } as ScrollPositionData);
-                            importCount++;
-                        }
-                    }
-                    
-                    await plugin.saveLegacyPositionSettings();
+                    const imported = parsePositionExport(content);
+                    await plugin.importPositionState(imported.state);
                     onComplete();
-                    new Notice(t.dataImported?.replace('{count}', importCount.toString()) || 
-                              `Imported ${importCount} scroll position records`);
+                    new Notice(t.dataImported?.replace('{count}', imported.recordCount.toString()) ||
+                              `Imported ${imported.recordCount} scroll position records`);
                 } catch (error) {
                     console.error('Import error:', error);
                     new Notice(t.importError);

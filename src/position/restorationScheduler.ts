@@ -36,8 +36,12 @@ export class RestorationScheduler {
 		const generation = (this.generations.get(key) ?? 0) + 1;
 		this.generations.set(key, generation);
 
-		const maxAttempts = Math.max(1, Math.floor(options.maxAttempts));
-		const intervalMs = Math.max(0, options.intervalMs);
+		const maxAttempts = Number.isFinite(options.maxAttempts)
+			? Math.max(1, Math.floor(options.maxAttempts))
+			: 1;
+		const intervalMs = Number.isFinite(options.intervalMs)
+			? Math.max(0, options.intervalMs)
+			: 0;
 		const tolerance = options.tolerance ?? 1;
 		let attempts = 0;
 		let actualHeight = target.readScroll();

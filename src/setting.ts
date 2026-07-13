@@ -10,6 +10,8 @@ export interface LastPositionSettings {
 	myInterval: number;
 	//重试策略-重试次数最大值
 	myRetryCount: number;
+	//恢复任务的重试间隔,单位毫秒
+	restoreIntervalMs: number;
 	//恢复前等待原生导航完成的时间
 	restoreDelayMs: number;
 	//版本化的文件级与标签页级位置数据
@@ -37,6 +39,7 @@ export interface ScrollPositionData {
 export const DEFAULT_SETTINGS: LastPositionSettings = {
 	myInterval: 3,
 	myRetryCount: 30,
+	restoreIntervalMs: 100,
 	restoreDelayMs: 300,
 	positionState: emptyPositionState(),
 	//数据
@@ -94,10 +97,26 @@ export class AutoSaveScrollSettingsTab  extends PluginSettingTab {
 					.onChange(async (value) => {
 						// 将输入的值转换为数字
 						const retryCount = Number(value);
-						if (!isNaN(retryCount) && retryCount > 0) {
+						if (Number.isFinite(retryCount) && retryCount > 0) {
 							this.plugin.settings.myRetryCount = retryCount;
 							await this.plugin.saveSettings(); // 保存设置
 							new Notice(t.restartNotice)
+						}
+					}));
+		//恢复重试间隔设置
+		new Setting(containerEl)
+			.setName(t.restoreInterval)
+			.setDesc(t.restoreIntervalDesc)
+			.addText((text) =>
+				text
+					.setPlaceholder(t.inputRestoreInterval)
+					.setValue(this.plugin.settings.restoreIntervalMs.toString())
+					.onChange(async (value) => {
+						const interval = Number(value);
+						if (Number.isFinite(interval) && interval >= 0) {
+							this.plugin.settings.restoreIntervalMs = interval;
+							await this.plugin.saveSettings();
+							new Notice(t.changeSuccess);
 						}
 					}));
 		//恢复延迟设置

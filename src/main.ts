@@ -5,7 +5,7 @@ import { ObsidianLeafSource } from './obsidian/obsidianLeafSource';
 import { AnchorSuppression } from './position/anchorSuppression';
 import { PositionCoordinator } from './position/positionCoordinator';
 import { PositionStore, migratePositionState } from './position/positionStore';
-import { snapshotLegacyPositionData } from './position/legacyPositionSnapshot';
+import type { PositionState } from './position/positionStore';
 import { RestorationScheduler } from './position/restorationScheduler';
 import { SerializedTaskQueue } from './position/serializedTaskQueue';
 import { ParsedSettingsData, parseSettingsData } from './position/settingsData';
@@ -41,20 +41,25 @@ export default class LastPositionPlugin extends Plugin {
 
 	async loadSettings(): Promise<void> {
 		const { data: loadedData, shouldRepair } = await this.readSettingsData();
+		const sanitizedLoadedData = { ...loadedData };
+		const hadRemovedRestoreSettings = Object.prototype.hasOwnProperty.call(sanitizedLoadedData, 'restoreTimeoutMs')
+			|| Object.prototype.hasOwnProperty.call(sanitizedLoadedData, 'enableDebugLogging');
+		delete sanitizedLoadedData.restoreTimeoutMs;
+		delete sanitizedLoadedData.enableDebugLogging;
 		const positionState = migratePositionState(
-			loadedData.positionState,
-			loadedData.scrollHeightData,
+			sanitizedLoadedData.positionState,
+			sanitizedLoadedData.scrollHeightData,
 		);
 
 		this.settings = {
 			...DEFAULT_SETTINGS,
-			...loadedData,
+			...sanitizedLoadedData,
 			positionState,
 			scrollHeightData: new Map(Object.entries(positionState.files)),
 		};
 		this.positionStore = new PositionStore(positionState);
 
-		if (shouldRepair) {
+		if (shouldRepair || hadRemovedRestoreSettings) {
 			try {
 				await this.persistPositionState();
 			} catch (error) {
@@ -67,9 +72,9 @@ export default class LastPositionPlugin extends Plugin {
 		await this.enqueuePositionPersistence();
 	}
 
-	async saveLegacyPositionSettings(): Promise<void> {
-		const legacySnapshot = snapshotLegacyPositionData(this.settings.scrollHeightData);
-		await this.enqueuePositionPersistence(legacySnapshot);
+	async importPositionState(imported: PositionState): Promise<void> {
+		this.positionStore.merge(imported);
+		await this.persistPositionState();
 	}
 
 	async persistPositionState(): Promise<void> {
@@ -117,12 +122,12 @@ export default class LastPositionPlugin extends Plugin {
 			scheduler,
 			anchorSuppression,
 			maxAttempts: () => this.settings.myRetryCount,
+			restoreIntervalMs: () => this.settings.restoreIntervalMs,
 			debounceMs: () => this.settings.myInterval * 1000,
 			restoreDelayMs: () => this.settings.restoreDelayMs,
 			persist: () => this.persistPositionState(),
 			updateStatus: height => this.updateStatusBar(height),
 			onRestoreExpired: details => {
-				console.warn('[Last-Position-Plugin]: Restore expired', details);
 				new Notice(t.retryLimit);
 			},
 			onPersistError: error => {
@@ -183,12 +188,8 @@ export default class LastPositionPlugin extends Plugin {
 		}
 	}
 
-	private enqueuePositionPersistence(legacySnapshot?: unknown): Promise<void> {
+	private enqueuePositionPersistence(): Promise<void> {
 		return this.persistenceQueue.enqueue(async () => {
-			if (legacySnapshot !== undefined) {
-				this.positionStore.replaceFileRecords(legacySnapshot);
-			}
-
 			const positionState = this.positionStore.snapshot();
 			this.settings.positionState = positionState;
 			this.settings.scrollHeightData = new Map(Object.entries(positionState.files));

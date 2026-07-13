@@ -19,6 +19,9 @@ export interface Translation {
     retryCount: string;
     retryCountDesc: string;
     inputRetryCount: string;
+    restoreInterval: string;
+    restoreIntervalDesc: string;
+    inputRestoreInterval: string;
     restoreDelay: string;
     restoreDelayDesc: string;
     inputRestoreDelay: string;
@@ -79,6 +82,9 @@ export const TRANSLATIONS: Record<string, Translation> = {
         retryCount: '重试次数',
         retryCountDesc: '设置重试策略的最大重试次数，默认为30次。⚠请谨慎更改！',
         inputRetryCount: '输入重试次数',
+        restoreInterval: '恢复重试间隔',
+        restoreIntervalDesc: '恢复失败后的重试间隔，单位毫秒，默认100毫秒',
+        inputRestoreInterval: '输入重试间隔（毫秒）',
         restoreDelay: '恢复延迟',
         restoreDelayDesc: '打开笔记后等待多少毫秒再恢复位置，默认300毫秒',
         inputRestoreDelay: '输入恢复延迟（毫秒）',
@@ -136,6 +142,9 @@ export const TRANSLATIONS: Record<string, Translation> = {
         retryCount: 'Retry Count',
         retryCountDesc: 'Set maximum retry count for retry strategy. Default is 30. ⚠ Change with caution!',
         inputRetryCount: 'Enter retry count',
+        restoreInterval: 'Restore Retry Interval',
+        restoreIntervalDesc: 'Delay between restore attempts in milliseconds. Default is 100.',
+        inputRestoreInterval: 'Enter retry interval (milliseconds)',
         restoreDelay: 'Restore Delay',
         restoreDelayDesc: 'Wait before restoring a note position, in milliseconds. Default is 300.',
         inputRestoreDelay: 'Enter restore delay (milliseconds)',

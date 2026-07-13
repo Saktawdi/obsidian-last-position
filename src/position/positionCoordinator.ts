@@ -17,6 +17,7 @@ export interface PositionCoordinatorOptions<TLeaf, TView> {
 	scheduler: RestorationScheduler;
 	anchorSuppression: AnchorSuppression;
 	maxAttempts: () => number;
+	restoreIntervalMs?: () => number;
 	debounceMs: () => number;
 	restoreDelayMs: () => number;
 	persist: () => Promise<void>;
@@ -197,7 +198,7 @@ export class PositionCoordinator<TLeaf, TView> {
 				applyScroll: height => this.options.registry.applyScroll(record, height),
 			}, {
 				maxAttempts: this.options.maxAttempts(),
-				intervalMs: 100,
+				intervalMs: this.options.restoreIntervalMs?.() ?? 100,
 			}).then(result => this.handleRestoreResult(record, saved.height, result, run))
 				.finally(() => {
 					if (this.restorationRuns.get(record.leafId) === run) {

@@ -68,6 +68,25 @@ test('deletes a file fallback and every leaf record associated with the file', (
 	assert.equal(store.deleteFile('missing.md'), false);
 });
 
+test('merges validated imported state without discarding current records', () => {
+	const store = new PositionStore();
+	store.save('leaf-current', 'keep.md', 10, 1);
+
+	store.merge({
+		version: 2,
+		files: {
+			'imported.md': { height: 20, lastAccessed: 2 },
+		},
+		leaves: {
+			'leaf-imported': { filePath: 'imported.md', height: 30, lastAccessed: 3 },
+		},
+	});
+
+	assert.equal(store.resolve('leaf-current', 'keep.md')?.height, 10);
+	assert.equal(store.resolve('other-leaf', 'imported.md')?.height, 20);
+	assert.equal(store.resolve('leaf-imported', 'imported.md')?.height, 30);
+});
+
 test('uses the supplied migration time for invalid versioned timestamps', () => {
 	const state = migratePositionState({
 		version: 2,
@@ -76,4 +95,16 @@ test('uses the supplied migration time for invalid versioned timestamps', () => 
 	}, undefined, 123);
 
 	assert.equal(state.files['note.md'].lastAccessed, 123);
+});
+
+test('falls back to legacy records when the versioned containers are malformed', () => {
+	const state = migratePositionState({
+		version: 2,
+		files: [],
+		leaves: [],
+	}, {
+		'note.md': 42,
+	}, 123);
+
+	assert.deepEqual(state.files['note.md'], { height: 42, lastAccessed: 123 });
 });

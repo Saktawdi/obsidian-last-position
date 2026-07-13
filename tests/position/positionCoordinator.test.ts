@@ -106,7 +106,11 @@ function nextTurn(): Promise<void> {
 	return new Promise(resolve => setTimeout(resolve, 5));
 }
 
-function createCoordinator(source: CoordinatorLeafSource, store: PositionStore, restoreDelayMs = 0) {
+function createCoordinator(
+	source: CoordinatorLeafSource,
+	store: PositionStore,
+	restoreDelayMs = 0,
+) {
 	let persists = 0;
 	const statusHeights: number[] = [];
 	const coordinator = new PositionCoordinator({
@@ -115,6 +119,7 @@ function createCoordinator(source: CoordinatorLeafSource, store: PositionStore, 
 		scheduler: new RestorationScheduler(),
 		anchorSuppression: new AnchorSuppression(500),
 		maxAttempts: () => 3,
+		restoreIntervalMs: () => 0,
 		debounceMs: () => 0,
 		restoreDelayMs: () => restoreDelayMs,
 		persist: async () => {
