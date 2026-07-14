@@ -71,6 +71,23 @@ export interface Translation {
     cleanupDays: string;
     cleanupDaysDesc: string;
     cleanupDaysNotice: string;
+    saveBookmarkCommand: string;
+    selectBookmarkCommand: string;
+    removeBookmarkCommand: string;
+    bookmarkNameTitle: string;
+    bookmarkNamePlaceholder: string;
+    bookmarkSaved: string;
+    bookmarkListTitle: string;
+    bookmarkListPlaceholder: string;
+    noBookmarks: string;
+    bookmarkStale: string;
+    bookmarkSaveFailed: string;
+    bookmarkDeleteConfirmTitle: string;
+    bookmarkDeleteConfirmMessage: string;
+    bookmarkDeleted: string;
+    bookmarkDeleteFailed: string;
+    statusBarSaveBookmarkHint: string;
+    statusBarOpenBookmarkListHint: string;
 }
 
 export const TRANSLATIONS: Record<string, Translation> = {
@@ -133,6 +150,23 @@ export const TRANSLATIONS: Record<string, Translation> = {
         cleanupDays: "数据清理天数",
         cleanupDaysDesc: "设置要清理的数据距今未曾访问的天数，默认30天",
         cleanupDaysNotice: "数据自动清理设置已更改，启动插件时生效",
+        saveBookmarkCommand: "保存书签",
+        selectBookmarkCommand: "选择书签",
+        removeBookmarkCommand: "删除书签",
+        bookmarkNameTitle: "保存位置书签",
+        bookmarkNamePlaceholder: "输入书签名称",
+        bookmarkSaved: "书签已保存：{name}",
+        bookmarkListTitle: "选择位置书签",
+        bookmarkListPlaceholder: "搜索书签名称",
+        noBookmarks: "当前文件没有书签",
+        bookmarkStale: "当前文件已发生变化，未执行书签跳转",
+        bookmarkSaveFailed: "书签已写入内存，但保存到设置失败",
+        bookmarkDeleteConfirmTitle: "确认删除书签",
+        bookmarkDeleteConfirmMessage: "确认删除书签“{name}”（高度 {height}）？",
+        bookmarkDeleted: "书签已删除：{name}",
+        bookmarkDeleteFailed: "书签已从内存删除，但保存到设置失败",
+        statusBarSaveBookmarkHint: "左键：保存书签",
+        statusBarOpenBookmarkListHint: "右键：打开书签列表",
     },
     en: {
         currentHeight: 'Current Height',
@@ -193,6 +227,23 @@ export const TRANSLATIONS: Record<string, Translation> = {
         cleanupDays: "Cleanup Days",
         cleanupDaysDesc: "Automatically remove data entries older than this many days (minimum 7 days)",
         cleanupDaysNotice: "Cleanup setting have been changed, take effect after restarting the plugin",
+        saveBookmarkCommand: "Save Bookmark",
+        selectBookmarkCommand: "Select Bookmark",
+        removeBookmarkCommand: "Remove Bookmark",
+        bookmarkNameTitle: "Save Position Bookmark",
+        bookmarkNamePlaceholder: "Enter bookmark name",
+        bookmarkSaved: "Bookmark saved: {name}",
+        bookmarkListTitle: "Select Position Bookmark",
+        bookmarkListPlaceholder: "Search bookmark names",
+        noBookmarks: "No bookmarks for the current file",
+        bookmarkStale: "The current file changed; bookmark jump was not applied",
+        bookmarkSaveFailed: "Bookmark was added in memory, but saving settings failed",
+        bookmarkDeleteConfirmTitle: "Confirm Bookmark Deletion",
+        bookmarkDeleteConfirmMessage: "Delete bookmark \"{name}\" (height {height})?",
+        bookmarkDeleted: "Bookmark deleted: {name}",
+        bookmarkDeleteFailed: "Bookmark was removed in memory, but saving settings failed",
+        statusBarSaveBookmarkHint: "Left click: Save bookmark",
+        statusBarOpenBookmarkListHint: "Right click: Open bookmark list",
     }
 }; 
 

@@ -30,6 +30,7 @@ class CoordinatorLeafSource implements LeafSource<FakeLeaf, FakeView> {
 	private readonly viewChangeCallbacks = new Map<string, () => void>();
 	readonly appliedHeights: number[] = [];
 	ignoreAppliedScroll = false;
+	emitAppliedScrollAsUser = false;
 	onIsCurrent?: () => void;
 
 	describe(leaf: FakeLeaf | null): RegisteredLeaf<FakeLeaf, FakeView> | undefined {
@@ -60,6 +61,7 @@ class CoordinatorLeafSource implements LeafSource<FakeLeaf, FakeView> {
 		this.appliedHeights.push(height);
 		if (this.ignoreAppliedScroll) return;
 		record.view.scroll = height;
+		if (this.emitAppliedScrollAsUser) this.callbacks.get(record.leafId)?.({ userInitiated: true });
 	}
 
 	bindScroll(
@@ -460,6 +462,67 @@ test('respects a user scroll to zero after a mode-change rebind', async () => {
 	source.scroll('leaf-a', 0, true);
 	await new Promise(resolve => setTimeout(resolve, 30));
 
+	assert.equal(source.leaves[0].view.scroll, 0);
+	await coordinator.dispose();
+});
+
+test('reads the active leaf position without changing stored history', async () => {
+	const source = new CoordinatorLeafSource();
+	const store = new PositionStore();
+	const { coordinator } = createCoordinator(source, store);
+
+	coordinator.start(source.leaves[0].leaf);
+	source.scroll('leaf-a', 42, true);
+	await nextTurn();
+
+	assert.deepEqual(coordinator.getActivePosition(), {
+		leafId: 'leaf-a',
+		filePath: 'a.md',
+		height: 42,
+	});
+	await coordinator.dispose();
+});
+
+test('scrolls a matching active bookmark and cancels a pending restore without persisting it', async () => {
+	const source = new CoordinatorLeafSource();
+	const store = new PositionStore();
+	store.save('leaf-a', 'a.md', 10, 1);
+	const { coordinator, getPersists } = createCoordinator(source, store, 20);
+
+	coordinator.start(source.leaves[0].leaf);
+	assert.equal(coordinator.scrollActiveTo('a.md', 75), true);
+	await new Promise(resolve => setTimeout(resolve, 30));
+
+	assert.equal(source.leaves[0].view.scroll, 75);
+	assert.equal(store.resolve('leaf-a', 'a.md')?.height, 10);
+	assert.equal(getPersists(), 0);
+	await coordinator.dispose();
+});
+
+test('does not persist a programmatic bookmark event even when it carries user intent', async () => {
+	const source = new CoordinatorLeafSource();
+	source.emitAppliedScrollAsUser = true;
+	const store = new PositionStore();
+	store.save('leaf-a', 'a.md', 10, 1);
+	const { coordinator, getPersists } = createCoordinator(source, store);
+
+	coordinator.start(source.leaves[0].leaf);
+	assert.equal(coordinator.scrollActiveTo('a.md', 75), true);
+	await nextTurn();
+
+	assert.equal(store.resolve('leaf-a', 'a.md')?.height, 10);
+	assert.equal(getPersists(), 0);
+	await coordinator.dispose();
+});
+
+test('rejects a bookmark jump after the active leaf changes files', async () => {
+	const source = new CoordinatorLeafSource();
+	const store = new PositionStore();
+	const { coordinator } = createCoordinator(source, store);
+
+	coordinator.start(source.leaves[0].leaf);
+	source.openFile('leaf-a', 'b.md');
+	assert.equal(coordinator.scrollActiveTo('a.md', 75), false);
 	assert.equal(source.leaves[0].view.scroll, 0);
 	await coordinator.dispose();
 });

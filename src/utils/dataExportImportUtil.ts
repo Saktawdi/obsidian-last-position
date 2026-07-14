@@ -12,7 +12,8 @@ export class DataExportImportUtil {
         const t = getTranslation();
         const positionState = plugin.positionStore.snapshot();
         if (Object.keys(positionState.files).length === 0
-            && Object.keys(positionState.leaves).length === 0) {
+            && Object.keys(positionState.leaves).length === 0
+            && !Object.values(positionState.bookmarks).some(bookmarks => bookmarks.length > 0)) {
             new Notice(t.noDataToExport);
             return;
         }

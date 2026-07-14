@@ -11,6 +11,12 @@ export interface RestoreExpiryDetails {
 	attempts: number;
 }
 
+export interface ActivePosition {
+	leafId: string;
+	filePath: string;
+	height: number;
+}
+
 export interface PositionCoordinatorOptions<TLeaf, TView> {
 	registry: LeafRegistry<TLeaf, TView>;
 	store: PositionStore;
@@ -40,6 +46,12 @@ interface ModeHandoff {
 	height: number;
 }
 
+interface ProgrammaticJump<TLeaf, TView> {
+	record: RegisteredLeaf<TLeaf, TView>;
+	targetHeight: number;
+	timer: TimerHandle;
+}
+
 export class PositionCoordinator<TLeaf, TView> {
 	private activeRecord?: RegisteredLeaf<TLeaf, TView>;
 	private readonly pendingSaves = new Map<string, PendingSave<TLeaf, TView>>();
@@ -47,6 +59,7 @@ export class PositionCoordinator<TLeaf, TView> {
 	private readonly restorationRuns = new Map<string, number>();
 	private readonly restoring = new Set<string>();
 	private readonly modeHandoffs = new Map<string, ModeHandoff>();
+	private readonly programmaticJumps = new Map<string, ProgrammaticJump<TLeaf, TView>>();
 	private persistQueue: Promise<void> = Promise.resolve();
 	private disposed = false;
 
@@ -55,6 +68,38 @@ export class PositionCoordinator<TLeaf, TView> {
 	start(activeLeaf: TLeaf | null): void {
 		this.reconcileLeaves();
 		this.handleActiveLeafChange(activeLeaf);
+	}
+
+	getActivePosition(): ActivePosition | undefined {
+		const record = this.getCurrentActiveRecord();
+		if (!record) return undefined;
+
+		const height = this.options.registry.readScroll(record);
+		if (height === undefined || !Number.isFinite(height) || height < 0) return undefined;
+		return {
+			leafId: record.leafId,
+			filePath: record.filePath,
+			height,
+		};
+	}
+
+	scrollActiveTo(filePath: string, height: number): boolean {
+		if (typeof filePath !== 'string'
+			|| filePath.trim().length === 0
+			|| filePath.includes('\0')
+			|| !Number.isFinite(height)
+			|| height < 0) return false;
+
+		const record = this.getCurrentActiveRecord();
+		if (!record || record.filePath !== filePath) return false;
+
+		this.cancelRestore(record.leafId);
+		this.modeHandoffs.delete(record.leafId);
+		this.armProgrammaticJump(record, height);
+		this.options.registry.applyScroll(record, height);
+		const appliedHeight = this.options.registry.readScroll(record);
+		this.options.updateStatus(appliedHeight ?? height);
+		return true;
 	}
 
 	reconcile(): void {
@@ -109,6 +154,8 @@ export class PositionCoordinator<TLeaf, TView> {
 		this.restoreTimers.clear();
 		this.options.scheduler.cancelAll();
 		this.modeHandoffs.clear();
+		for (const jump of this.programmaticJumps.values()) globalThis.clearTimeout(jump.timer);
+		this.programmaticJumps.clear();
 
 		for (const pending of this.pendingSaves.values()) {
 			globalThis.clearTimeout(pending.timer);
@@ -125,6 +172,7 @@ export class PositionCoordinator<TLeaf, TView> {
 		details: ScrollEventDetails,
 	): void {
 		if (this.disposed) return;
+		if (this.consumeProgrammaticJump(record, details)) return;
 		if (details.userInitiated) this.modeHandoffs.delete(record.leafId);
 		if (this.restoring.has(record.leafId)) {
 			if (!details.userInitiated) return;
@@ -146,6 +194,54 @@ export class PositionCoordinator<TLeaf, TView> {
 		this.options.updateStatus(height);
 		this.cancelRestore(record.leafId);
 		this.scheduleSave(record, height);
+	}
+
+	private getCurrentActiveRecord(): RegisteredLeaf<TLeaf, TView> | undefined {
+		const active = this.activeRecord;
+		if (!active) return undefined;
+
+		const current = this.options.registry.describe(active.leaf);
+		if (!current || current.leafId !== active.leafId || !this.options.registry.isCurrent(current)) {
+			return undefined;
+		}
+		this.activeRecord = current;
+		return current;
+	}
+
+	private armProgrammaticJump(record: RegisteredLeaf<TLeaf, TView>, targetHeight: number): void {
+		this.clearProgrammaticJump(record.leafId);
+		const timer = globalThis.setTimeout(() => {
+			this.programmaticJumps.delete(record.leafId);
+		}, 500);
+		this.programmaticJumps.set(record.leafId, { record, targetHeight, timer });
+	}
+
+	private consumeProgrammaticJump(
+		record: RegisteredLeaf<TLeaf, TView>,
+		details: ScrollEventDetails,
+	): boolean {
+		const jump = this.programmaticJumps.get(record.leafId);
+		if (!jump) return false;
+		if (jump.record.filePath !== record.filePath) {
+			this.clearProgrammaticJump(record.leafId);
+			return false;
+		}
+
+		const currentHeight = this.options.registry.readScroll(record);
+		if (currentHeight !== undefined
+			&& Number.isFinite(currentHeight)
+			&& Math.abs(currentHeight - jump.targetHeight) <= 1) {
+			return true;
+		}
+		if (details.userInitiated) this.clearProgrammaticJump(record.leafId);
+		return false;
+	}
+
+	private clearProgrammaticJump(leafId: string): void {
+		const jump = this.programmaticJumps.get(leafId);
+		if (!jump) return;
+		globalThis.clearTimeout(jump.timer);
+		this.programmaticJumps.delete(leafId);
 	}
 
 	private scheduleSave(record: RegisteredLeaf<TLeaf, TView>, height: number): void {
@@ -243,6 +339,7 @@ export class PositionCoordinator<TLeaf, TView> {
 		const timer = this.restoreTimers.get(leafId);
 		if (timer !== undefined) globalThis.clearTimeout(timer);
 		this.restoreTimers.delete(leafId);
+		this.clearProgrammaticJump(leafId);
 		this.options.scheduler.cancel(leafId);
 		this.restorationRuns.set(leafId, (this.restorationRuns.get(leafId) ?? 0) + 1);
 		this.restoring.delete(leafId);
