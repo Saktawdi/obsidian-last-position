@@ -77,3 +77,26 @@ test('stops retrying when another scroll changes the position between attempts',
 	assert.equal((await running).reason, 'interrupted');
 	assert.equal(applies, 1);
 });
+
+test('reapplies after a late renderer reset before completing', async () => {
+	let scroll = 0;
+	let applies = 0;
+	const scheduler = new RestorationScheduler();
+	const result = await scheduler.start('leaf-a', 20, {
+		isCurrent: () => true,
+		readScroll: () => scroll,
+		applyScroll: value => {
+			applies++;
+			scroll = value;
+			if (applies === 1) {
+				setTimeout(() => {
+					scroll = Number.NaN;
+				}, 2);
+			}
+		},
+	}, { maxAttempts: 3, intervalMs: 5 });
+
+	assert.equal(result.reason, 'completed');
+	assert.equal(applies, 2);
+	assert.equal(scroll, 20);
+});

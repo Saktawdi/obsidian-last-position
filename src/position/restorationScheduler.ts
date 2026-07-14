@@ -46,9 +46,10 @@ export class RestorationScheduler {
 		let attempts = 0;
 		let actualHeight = target.readScroll();
 		let lastAppliedHeight: number | undefined;
+		let confirming = false;
 
 		try {
-			while (attempts < maxAttempts) {
+			while (attempts <= maxAttempts) {
 				if (!this.isGenerationCurrent(key, generation)) {
 					return { reason: 'cancelled', attempts, actualHeight };
 				}
@@ -65,8 +66,15 @@ export class RestorationScheduler {
 					return { reason: 'interrupted', attempts, actualHeight };
 				}
 				if (this.isWithinTolerance(actualHeight, height, tolerance)) {
-					return { reason: 'completed', attempts, actualHeight };
+					if (confirming) {
+						return { reason: 'completed', attempts, actualHeight };
+					}
+					confirming = true;
+					await delay(intervalMs);
+					continue;
 				}
+				confirming = false;
+				if (attempts >= maxAttempts) break;
 
 				this.applying.add(key);
 				try {
@@ -79,9 +87,9 @@ export class RestorationScheduler {
 				lastAppliedHeight = actualHeight;
 
 				if (this.isWithinTolerance(actualHeight, height, tolerance)) {
-					return { reason: 'completed', attempts, actualHeight };
+					confirming = true;
 				}
-				if (attempts >= maxAttempts) break;
+				if (attempts >= maxAttempts && !confirming) break;
 
 				await delay(intervalMs);
 			}
