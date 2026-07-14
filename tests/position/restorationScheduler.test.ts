@@ -90,7 +90,30 @@ test('reapplies after a late renderer reset before completing', async () => {
 			scroll = value;
 			if (applies === 1) {
 				setTimeout(() => {
-					scroll = Number.NaN;
+					scroll = 0;
+				}, 2);
+			}
+		},
+	}, { maxAttempts: 3, intervalMs: 5 });
+
+	assert.equal(result.reason, 'completed');
+	assert.equal(applies, 2);
+	assert.equal(scroll, 20);
+});
+
+test('reapplies after a non-finite confirmation height', async () => {
+	let scroll = 0;
+	let applies = 0;
+	const scheduler = new RestorationScheduler();
+	const result = await scheduler.start('leaf-a', 20, {
+		isCurrent: () => true,
+		readScroll: () => scroll,
+		applyScroll: value => {
+			applies++;
+			scroll = value;
+			if (applies === 1) {
+				setTimeout(() => {
+					scroll = Number.POSITIVE_INFINITY;
 				}, 2);
 			}
 		},

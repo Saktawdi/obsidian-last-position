@@ -58,22 +58,24 @@ export class RestorationScheduler {
 				}
 
 				actualHeight = target.readScroll();
-				if (attempts > 0
+				if (confirming) {
+					confirming = false;
+					if (this.isWithinTolerance(actualHeight, height, tolerance)) {
+						return { reason: 'completed', attempts, actualHeight };
+					}
+				} else if (attempts > 0
 					&& lastAppliedHeight !== undefined
 					&& actualHeight !== undefined
+					&& Number.isFinite(actualHeight)
 					&& Math.abs(actualHeight - lastAppliedHeight) > tolerance
 					&& Math.abs(actualHeight - height) > tolerance) {
 					return { reason: 'interrupted', attempts, actualHeight };
 				}
 				if (this.isWithinTolerance(actualHeight, height, tolerance)) {
-					if (confirming) {
-						return { reason: 'completed', attempts, actualHeight };
-					}
 					confirming = true;
 					await delay(intervalMs);
 					continue;
 				}
-				confirming = false;
 				if (attempts >= maxAttempts) break;
 
 				this.applying.add(key);
