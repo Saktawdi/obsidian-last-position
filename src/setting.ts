@@ -3,7 +3,8 @@ import { getTranslation } from '.language/translations';
 import { DataTable } from './component/dataTable';
 import LastPositionPlugin from './main';
 import { DataExportImportUtil } from './utils/dataExportImportUtil';
-import { emptyPositionState, PositionState } from './position/positionStore';
+import { emptyPositionState } from './storage/positionStore';
+import type { PositionState } from './domain/positionTypes';
 
 export interface LastPositionSettings {
 	//自动保存间隔时间,单位秒

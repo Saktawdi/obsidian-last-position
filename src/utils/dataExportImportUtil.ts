@@ -1,7 +1,7 @@
 import { Notice } from 'obsidian';
 import { getTranslation } from '.language/translations';
 import LastPositionPlugin from 'src/main';
-import { parsePositionExport, serializePositionState } from '../position/positionDataTransfer';
+import { parsePositionExport, serializePositionState } from '../storage/positionDataTransfer';
 
 export class DataExportImportUtil {
     /**

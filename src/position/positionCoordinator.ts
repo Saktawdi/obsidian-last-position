@@ -1,6 +1,6 @@
 import { LeafRegistry, RegisteredLeaf, ScrollEventDetails } from '../obsidian/leafRegistry';
 import { AnchorSuppression } from './anchorSuppression';
-import { PositionStore } from './positionStore';
+import { PositionStore } from '../storage/positionStore';
 import { RestorationResult, RestorationScheduler } from './restorationScheduler';
 
 export interface RestoreExpiryDetails {

@@ -1,7 +1,7 @@
 import { App, Modal, Setting, SuggestModal } from 'obsidian';
 import { getTranslation } from '.language/translations';
 import { filterBookmarkSuggestions } from '../position/bookmarkCommands';
-import { PositionBookmark } from '../position/positionStore';
+import type { PositionBookmark } from '../domain/positionTypes';
 
 export class BookmarkNameModal extends Modal {
 	private submitted = false;

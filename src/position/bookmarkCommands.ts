@@ -1,4 +1,4 @@
-import { PositionBookmark } from './positionStore';
+import type { PositionBookmark } from '../domain/positionTypes';
 
 export const BOOKMARK_COMMAND_IDS = {
 	save: 'last-position-save-bookmark',

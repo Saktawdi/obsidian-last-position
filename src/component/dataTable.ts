@@ -2,7 +2,7 @@ import { App } from 'obsidian';
 import { getTranslation } from '.language/translations';
 import { ConfirmModal } from './confirmedModal';
 import LastPositionPlugin from 'src/main';
-import type { ScrollPositionRecord } from 'src/position/positionStore';
+import type { ScrollPositionRecord } from 'src/domain/positionTypes';
 
 export interface DataTableOptions {
     containerEl: HTMLElement;

@@ -18,8 +18,8 @@ import {
 	STATUS_BAR_BOOKMARK_CLASS,
 	STATUS_BAR_BOOKMARK_FLASH_CLASS,
 } from './position/statusBarBookmarkActions';
-import { PositionStore, migratePositionState } from './position/positionStore';
-import type { PositionState } from './position/positionStore';
+import { PositionStore, migratePositionState } from './storage/positionStore';
+import type { PositionState } from './domain/positionTypes';
 import { RestorationScheduler } from './position/restorationScheduler';
 import { SerializedTaskQueue } from './position/serializedTaskQueue';
 import { ParsedSettingsData, parseSettingsData } from './position/settingsData';
