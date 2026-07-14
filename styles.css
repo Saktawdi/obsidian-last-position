@@ -18,3 +18,80 @@
 .last-position-status-bar-flash {
 	color: var(--text-success, #50fa7b) !important;
 }
+
+.last-position-settings .setting-item-control input[type='number'] {
+	width: 8rem;
+	max-width: 40vw;
+}
+
+.last-position-settings .setting-item.is-hidden {
+	display: none;
+}
+
+.last-position-advanced-settings {
+	margin: 8px 0 16px;
+}
+
+.last-position-advanced-settings > summary {
+	padding: 8px 0;
+	color: var(--text-muted);
+	cursor: pointer;
+}
+
+.last-position-settings .table-container {
+	max-height: 320px;
+	overflow: auto;
+	margin-bottom: 10px;
+}
+
+.last-position-settings .last-position-data-table {
+	width: 100%;
+	min-width: 620px;
+	border-collapse: collapse;
+}
+
+.last-position-settings .last-position-data-table thead {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	background: var(--background-primary);
+}
+
+.last-position-settings .last-position-data-table th,
+.last-position-settings .last-position-data-table td {
+	padding: 6px 8px;
+	text-align: left;
+	vertical-align: middle;
+}
+
+.last-position-settings .last-position-data-table th.is-sortable {
+	cursor: pointer;
+}
+
+.last-position-settings .last-position-data-table tbody tr:hover {
+	background: var(--background-modifier-hover);
+}
+
+.last-position-settings .last-position-data-table th:nth-child(n + 2),
+.last-position-settings .last-position-data-table td:nth-child(n + 2) {
+	white-space: nowrap;
+}
+
+.last-position-settings .last-position-delete-button {
+	width: 30px;
+	height: 30px;
+	padding: 0;
+}
+
+.last-position-settings .pagination-container,
+.last-position-settings .pagination-controls {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+
+.last-position-settings .pagination-container {
+	justify-content: space-between;
+	margin-top: 10px;
+}

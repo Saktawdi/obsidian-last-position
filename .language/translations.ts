@@ -13,6 +13,10 @@ export function getLanguage(): string {
 
 export interface Translation {
     currentHeight: string;
+    saveAndListenSettings: string;
+    positionRestoreSettings: string;
+    dataSettings: string;
+    advancedRestoreSettings: string;
     autoSave: string;
     autoSaveDesc: string;
     inputInterval: string;
@@ -95,6 +99,10 @@ export interface Translation {
 export const TRANSLATIONS: Record<string, Translation> = {
     zh: {
         currentHeight: '当前高度',
+        saveAndListenSettings: '保存与监听',
+        positionRestoreSettings: '位置恢复',
+        dataSettings: '数据',
+        advancedRestoreSettings: '高级恢复设置',
         autoSave: '自动保存',
         autoSaveDesc: '设置自动保存时间，间隔单位为秒,默认为3秒，下次启动生效',
         inputInterval: '输入时间间隔（秒）',
@@ -174,6 +182,10 @@ export const TRANSLATIONS: Record<string, Translation> = {
     },
     en: {
         currentHeight: 'Current Height',
+        saveAndListenSettings: 'Save and listen',
+        positionRestoreSettings: 'Position restore',
+        dataSettings: 'Data',
+        advancedRestoreSettings: 'Advanced restore settings',
         autoSave: 'Auto Save',
         autoSaveDesc: 'Set auto-save interval in seconds, default is 3 seconds, effective after restart',
         inputInterval: 'Enter interval (seconds)',

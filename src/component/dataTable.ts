@@ -1,4 +1,4 @@
-import { App } from 'obsidian';
+import { App, setIcon } from 'obsidian';
 import { getTranslation } from '.language/translations';
 import { ConfirmModal } from './confirmedModal';
 import type { ScrollPositionRecord } from 'src/domain/positionTypes';
@@ -46,18 +46,9 @@ export class DataTable {
         // 创建表格
         if (entries.length > 0) {
             const tableContainer = dataSection.createDiv('table-container');
-            // 设置表格容器最大高度和滚动
-            tableContainer.style.maxHeight = '300px';
-            tableContainer.style.overflowY = 'auto';
-            tableContainer.style.marginBottom = '10px';
-            
-            const table = tableContainer.createEl('table');
-            // 设置表格宽度占满容器
-            table.style.width = '100%';
+            const table = tableContainer.createEl('table', { cls: 'last-position-data-table' });
             // 表头
             const thead = table.createEl('thead');
-            // 样式：表头内容靠左
-            thead.style.textAlign = 'left';
             const headerRow = thead.createEl('tr');
 
             // 创建可排序的表头
@@ -65,18 +56,9 @@ export class DataTable {
             this.createSortableHeader(headerRow, 'height', t.table_scrollHeight);
             this.createSortableHeader(headerRow, 'lastAccessed', t.table_lastAccessed);
             headerRow.createEl('th', { text: t.table_actions });
-            
-            // headerRow.createEl('th', { text: t.table_fileName });
-            // headerRow.createEl('th', { text: t.table_scrollHeight });
-            // headerRow.createEl('th', { text: t.table_lastAccessed });
-            // headerRow.createEl('th', { text: t.table_actions });
-            
+
             // 表格内容
             const tbody = table.createEl('tbody');
-            // 样式：表格内容靠左
-            tbody.style.textAlign = 'left';
-            // 样式：每行间隔
-            tbody.style.padding = '20px';
             
             // 分页逻辑
             // 根据当前排序字段和方向排序
@@ -111,7 +93,15 @@ export class DataTable {
                 row.createEl('td', { text: formattedDate });
                 // 操作列
                 const actionCell = row.createEl('td');
-                const deleteBtn = actionCell.createEl('button', { text: t.delete });
+                const deleteBtn = actionCell.createEl('button', {
+                    cls: 'clickable-icon last-position-delete-button',
+                    attr: {
+                        'aria-label': t.delete,
+                        title: t.delete,
+                        type: 'button',
+                    },
+                });
+                setIcon(deleteBtn, 'trash-2');
                 deleteBtn.addEventListener('click', async () => {
                     // 使用确认对话框
                     const confirmModal = new ConfirmModal(this.context.app, {message: t.confirmClearMessage + '-[' + filename + ']'});
@@ -123,24 +113,17 @@ export class DataTable {
                     }
                 });
             });
-            
+
             // 创建分页控件容器
             const paginationContainer = dataSection.createDiv('pagination-container');
-            paginationContainer.style.display = 'flex';
-            paginationContainer.style.justifyContent = 'space-between';
-            paginationContainer.style.alignItems = 'center';
-            paginationContainer.style.marginTop = '10px';
-            
+
             // 左侧显示总条目数
             const itemCountDiv = paginationContainer.createDiv('item-count');
             itemCountDiv.setText(`${t.totalItems}: ${totalItems}`);
-            
+
             // 右侧分页控件
             const paginationControls = paginationContainer.createDiv('pagination-controls');
-            paginationControls.style.display = 'flex';
-            paginationControls.style.alignItems = 'center';
-            paginationControls.style.gap = '10px';
-            
+
             // 上一页按钮
             const prevBtn = paginationControls.createEl('button', { text: t.prevPage });
             prevBtn.disabled = this.currentPage <= 1;
@@ -173,8 +156,8 @@ export class DataTable {
 
     // 创建可排序的表头
     private createSortableHeader(headerRow: HTMLTableRowElement, field: string, text: string): void {
-        const th = headerRow.createEl('th');
-        const headerContent = th.createSpan({ text });
+        const th = headerRow.createEl('th', { cls: 'is-sortable' });
+        th.createSpan({ text });
         
         // 添加排序指示器
         const sortIndicator = th.createSpan({ cls: 'sort-indicator' });
@@ -183,7 +166,6 @@ export class DataTable {
         }
         
         // 添加点击事件
-        th.style.cursor = 'pointer';
         th.addEventListener('click', () => {
             if (this.sortField === field) {
                 // 切换排序方向

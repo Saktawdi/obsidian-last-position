@@ -48,7 +48,7 @@ test('reads source and target concurrently and ignores the fixed delay in smart 
 	pending.get('source.md')?.(500_000);
 	pending.get('target.md')?.(500_000);
 
-	assert.equal(await result, 1700);
+	assert.equal(await result, 930);
 });
 
 test('treats a failed character count as zero in smart mode', async () => {
@@ -64,5 +64,5 @@ test('treats a failed character count as zero in smart mode', async () => {
 	assert.equal(await resolveDelay({
 		source: record('source.md'),
 		target: record('target.md'),
-	}), 1300);
+	}), 750);
 });

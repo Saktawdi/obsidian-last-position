@@ -1,4 +1,5 @@
 import { App, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import type { TextComponent } from 'obsidian';
 import { getTranslation } from '.language/translations';
 import { DataTable, DataTableContext } from '../component/dataTable';
 import { DataExportImportUtil } from '../utils/dataExportImportUtil';
@@ -25,76 +26,28 @@ export class AutoSaveScrollSettingsTab extends PluginSettingTab {
 	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
+		containerEl.addClass('last-position-settings');
 		const t = getTranslation();
+
+		new Setting(containerEl)
+			.setName(t.saveAndListenSettings)
+			.setHeading();
 
 		new Setting(containerEl)
 			.setName(t.autoSave)
 			.setDesc(t.autoSaveDesc)
-			.addText(text => text
-				.setPlaceholder(t.inputInterval)
-				.setValue(this.context.settings.myInterval.toString())
-				.onChange(async value => {
+			.addText(text => {
+				this.configureNumericInput(text.inputEl, 0.1, 0.1);
+				text.setPlaceholder(t.inputInterval)
+					.setValue(this.context.settings.myInterval.toString())
+					.onChange(async value => {
 					const interval = Number(value);
 					if (!Number.isFinite(interval) || interval <= 0) return;
 					this.context.settings.myInterval = interval;
 					await this.context.saveSettings();
 					new Notice(t.restartNotice);
-				}));
-
-		new Setting(containerEl)
-			.setName(t.retryCount)
-			.setDesc(t.retryCountDesc)
-			.addText(text => text
-				.setPlaceholder(t.inputRetryCount)
-				.setValue(this.context.settings.myRetryCount.toString())
-				.onChange(async value => {
-					const retryCount = Number(value);
-					if (!Number.isFinite(retryCount) || retryCount <= 0) return;
-					this.context.settings.myRetryCount = retryCount;
-					await this.context.saveSettings();
-					new Notice(t.restartNotice);
-				}));
-
-		new Setting(containerEl)
-			.setName(t.restoreInterval)
-			.setDesc(t.restoreIntervalDesc)
-			.addText(text => text
-				.setPlaceholder(t.inputRestoreInterval)
-				.setValue(this.context.settings.restoreIntervalMs.toString())
-				.onChange(async value => {
-					const interval = Number(value);
-					if (!Number.isFinite(interval) || interval < 0) return;
-					this.context.settings.restoreIntervalMs = interval;
-					await this.context.saveSettings();
-					new Notice(t.changeSuccess);
-				}));
-
-		new Setting(containerEl)
-			.setName(t.smartRestoreDelay)
-			.setDesc(t.smartRestoreDelayDesc)
-			.addToggle(toggle => toggle
-				.setValue(this.context.settings.enableSmartRestoreDelay)
-				.onChange(async value => {
-					this.context.settings.enableSmartRestoreDelay = value;
-					await this.context.saveSettings();
-					this.display();
-					new Notice(t.changeSuccess);
-				}));
-
-		new Setting(containerEl)
-			.setName(t.restoreDelay)
-			.setDesc(t.restoreDelayDesc)
-			.addText(text => text
-				.setPlaceholder(t.inputRestoreDelay)
-				.setValue(this.context.settings.restoreDelayMs.toString())
-				.setDisabled(this.context.settings.enableSmartRestoreDelay)
-				.onChange(async value => {
-					const delay = Number(value);
-					if (!Number.isFinite(delay) || delay < 0) return;
-					this.context.settings.restoreDelayMs = delay;
-					await this.context.saveSettings();
-					new Notice(t.changeSuccess);
-				}));
+				});
+			});
 
 		new Setting(containerEl)
 			.setName(t.listenEvent)
@@ -109,6 +62,89 @@ export class AutoSaveScrollSettingsTab extends PluginSettingTab {
 					await this.context.saveSettings();
 					new Notice(t.restartNotice);
 				}));
+
+		new Setting(containerEl)
+			.setName(t.positionRestoreSettings)
+			.setHeading();
+
+		let fixedDelaySetting: Setting | undefined;
+		let fixedDelayInput: TextComponent | undefined;
+
+		new Setting(containerEl)
+			.setName(t.smartRestoreDelay)
+			.setDesc(t.smartRestoreDelayDesc)
+			.addToggle(toggle => toggle
+				.setValue(this.context.settings.enableSmartRestoreDelay)
+				.onChange(async value => {
+					this.context.settings.enableSmartRestoreDelay = value;
+					await this.context.saveSettings();
+					fixedDelaySetting?.settingEl.classList.toggle('is-hidden', value);
+					fixedDelayInput?.setDisabled(value);
+					new Notice(t.changeSuccess);
+				}));
+
+		fixedDelaySetting = new Setting(containerEl)
+			.setName(t.restoreDelay)
+			.setDesc(t.restoreDelayDesc)
+			.addText(text => {
+				fixedDelayInput = text;
+				this.configureNumericInput(text.inputEl, 0, 50);
+				text.setPlaceholder(t.inputRestoreDelay)
+					.setValue(this.context.settings.restoreDelayMs.toString())
+					.setDisabled(this.context.settings.enableSmartRestoreDelay)
+					.onChange(async value => {
+					const delay = Number(value);
+					if (!Number.isFinite(delay) || delay < 0) return;
+					this.context.settings.restoreDelayMs = delay;
+					await this.context.saveSettings();
+					new Notice(t.changeSuccess);
+				});
+			});
+		fixedDelaySetting.settingEl.classList.toggle(
+			'is-hidden',
+			this.context.settings.enableSmartRestoreDelay,
+		);
+
+		const advancedSettings = containerEl.createEl('details', {
+			cls: 'last-position-advanced-settings',
+		});
+		advancedSettings.createEl('summary', { text: t.advancedRestoreSettings });
+
+		new Setting(advancedSettings)
+			.setName(t.retryCount)
+			.setDesc(t.retryCountDesc)
+			.addText(text => {
+				this.configureNumericInput(text.inputEl, 1, 1);
+				text.setPlaceholder(t.inputRetryCount)
+					.setValue(this.context.settings.myRetryCount.toString())
+					.onChange(async value => {
+						const retryCount = Number(value);
+						if (!Number.isFinite(retryCount) || retryCount <= 0) return;
+						this.context.settings.myRetryCount = retryCount;
+						await this.context.saveSettings();
+						new Notice(t.restartNotice);
+					});
+			});
+
+		new Setting(advancedSettings)
+			.setName(t.restoreInterval)
+			.setDesc(t.restoreIntervalDesc)
+			.addText(text => {
+				this.configureNumericInput(text.inputEl, 0, 10);
+				text.setPlaceholder(t.inputRestoreInterval)
+					.setValue(this.context.settings.restoreIntervalMs.toString())
+					.onChange(async value => {
+						const interval = Number(value);
+						if (!Number.isFinite(interval) || interval < 0) return;
+						this.context.settings.restoreIntervalMs = interval;
+						await this.context.saveSettings();
+						new Notice(t.changeSuccess);
+					});
+			});
+
+		new Setting(containerEl)
+			.setName(t.dataSettings)
+			.setHeading();
 
 		new Setting(containerEl)
 			.setName(t.pageSize)
@@ -139,6 +175,13 @@ export class AutoSaveScrollSettingsTab extends PluginSettingTab {
 		const currentPage = this.dataTable.getCurrentPage();
 		this.dataTable.render();
 		this.dataTable.setCurrentPage(currentPage);
+	}
+
+	private configureNumericInput(input: HTMLInputElement, min: number, step: number): void {
+		input.type = 'number';
+		input.min = min.toString();
+		input.step = step.toString();
+		input.inputMode = 'decimal';
 	}
 
 	private buildDataManagementSettings(containerEl: HTMLDetailsElement): void {
