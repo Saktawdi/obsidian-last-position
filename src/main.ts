@@ -1,13 +1,6 @@
-import { MarkdownView, Notice, Plugin, TFile, setTooltip } from 'obsidian';
+import { MarkdownView, Notice, Plugin, TFile } from 'obsidian';
 import { TRANSLATIONS, getLanguage, getTranslation } from '.language/translations';
 import { PositionCoordinator } from './position/positionCoordinator';
-import {
-	getStatusBarBookmarkAction,
-	getStatusBarBookmarkTooltip,
-	STATUS_BAR_BOOKMARK_ACTIONS,
-	STATUS_BAR_BOOKMARK_CLASS,
-	STATUS_BAR_BOOKMARK_FLASH_CLASS,
-} from './position/statusBarBookmarkActions';
 import { PositionStore, migratePositionState } from './storage/positionStore';
 import type { PositionState } from './domain/positionTypes';
 import { PositionPersistenceService } from './storage/positionPersistence';
@@ -17,8 +10,11 @@ import {
 } from './adapters/obsidian/positionCoreFactory';
 import { BookmarkCommandController } from './commands/bookmarkCommands';
 import { CommandRegistry } from './commands/commandRegistry';
+import { StatusBarController } from './ui/statusBarController';
 import { ParsedSettingsData, parseSettingsData } from './position/settingsData';
-import { AutoSaveScrollSettingsTab, DEFAULT_SETTINGS, LastPositionSettings } from './setting';
+import { AutoSaveScrollSettingsTab } from './settings/settingsTab';
+import { DEFAULT_SETTINGS } from './settings/settingsModel';
+import type { LastPositionSettings } from './settings/settingsModel';
 
 export default class LastPositionPlugin extends Plugin {
 	settings: LastPositionSettings;
@@ -29,7 +25,7 @@ export default class LastPositionPlugin extends Plugin {
 	private persistence?: PositionPersistenceService;
 	private commandRegistry?: CommandRegistry;
 	private bookmarkCommands?: BookmarkCommandController;
-	private flashStatusTimer?: ReturnType<typeof globalThis.setTimeout>;
+	private statusBarController?: StatusBarController;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -40,17 +36,28 @@ export default class LastPositionPlugin extends Plugin {
 		}
 
 		this.statusBarItemEl = this.addStatusBarItem();
-		this.setupStatusBarBookmarkPresentation();
+		this.statusBarController = new StatusBarController(() => this.bookmarkCommands);
+		this.statusBarController.mount(this.statusBarItemEl, (element, type, handler) => {
+			if (type === 'click') this.registerDomEvent(element, 'click', handler);
+			else this.registerDomEvent(element, 'contextmenu', handler);
+		});
 		this.updateStatusBar(0);
-		this.registerStatusBarBookmarkActions();
-		this.addSettingTab(new AutoSaveScrollSettingsTab(this.app, this));
+		this.addSettingTab(new AutoSaveScrollSettingsTab({
+			app: this.app,
+			plugin: this,
+			settings: this.settings,
+			positionStore: this.positionStore,
+			saveSettings: () => this.saveSettings(),
+			persistPositionState: () => this.persistPositionState(),
+			importPositionState: state => this.importPositionState(state),
+		}));
 
 		if (this.settings.enableAutoCleanup) this.cleanupOldData();
 		this.app.workspace.onLayoutReady(() => this.initializeCoordinator());
 	}
 
 	async onunload(): Promise<void> {
-		if (this.flashStatusTimer !== undefined) globalThis.clearTimeout(this.flashStatusTimer);
+		this.statusBarController?.dispose();
 		await this.core?.dispose();
 		await this.persistence?.flush();
 	}
@@ -105,12 +112,7 @@ export default class LastPositionPlugin extends Plugin {
 	}
 
 	flashStatusBar(): void {
-		this.statusBarItemEl.addClass(STATUS_BAR_BOOKMARK_FLASH_CLASS);
-		if (this.flashStatusTimer !== undefined) globalThis.clearTimeout(this.flashStatusTimer);
-		this.flashStatusTimer = globalThis.setTimeout(() => {
-			this.statusBarItemEl.removeClass(STATUS_BAR_BOOKMARK_FLASH_CLASS);
-			this.flashStatusTimer = undefined;
-		}, 900);
+		this.statusBarController?.flash();
 	}
 
 	cleanupOldData(): void {
@@ -174,31 +176,6 @@ export default class LastPositionPlugin extends Plugin {
 		this.registerDomEvent(document, 'click', event => this.handleInternalLinkClick(event), true);
 	}
 
-	private registerStatusBarBookmarkActions(): void {
-		this.registerDomEvent(this.statusBarItemEl, 'click', () => {
-			if (getStatusBarBookmarkAction({ type: 'click' }) !== STATUS_BAR_BOOKMARK_ACTIONS.save) return;
-			this.bookmarkCommands?.saveBookmark();
-		});
-		this.registerDomEvent(this.statusBarItemEl, 'contextmenu', event => {
-			event.preventDefault();
-			if (getStatusBarBookmarkAction({ type: 'contextmenu' })
-				!== STATUS_BAR_BOOKMARK_ACTIONS.openList) return;
-			this.bookmarkCommands?.openBookmarkMenu(event);
-		});
-	}
-
-	private setupStatusBarBookmarkPresentation(): void {
-		const t = getTranslation();
-		this.statusBarItemEl.addClass(STATUS_BAR_BOOKMARK_CLASS);
-		setTooltip(this.statusBarItemEl, getStatusBarBookmarkTooltip({
-			saveBookmark: t.statusBarSaveBookmarkHint,
-			openBookmarkList: t.statusBarOpenBookmarkListHint,
-		}), {
-			placement: 'top',
-			delay: 300,
-		});
-	}
-
 	private handleInternalLinkClick(event: MouseEvent): void {
 		if (!(event.target instanceof Element)) return;
 		const link = event.target.closest('a.internal-link');
@@ -218,8 +195,7 @@ export default class LastPositionPlugin extends Plugin {
 	}
 
 	private updateStatusBar(height: number): void {
-		const t = getTranslation();
-		this.statusBarItemEl.setText(`${t.currentHeight}: ${height.toFixed(0)}`);
+		this.statusBarController?.setHeight(height);
 	}
 
 	private getPersistence(): PositionPersistenceService {

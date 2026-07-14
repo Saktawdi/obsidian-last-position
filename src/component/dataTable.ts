@@ -1,20 +1,26 @@
 import { App } from 'obsidian';
 import { getTranslation } from '.language/translations';
 import { ConfirmModal } from './confirmedModal';
-import LastPositionPlugin from 'src/main';
 import type { ScrollPositionRecord } from 'src/domain/positionTypes';
+import type { PositionStore } from '../storage/positionStore';
+import type { LastPositionSettings } from '../settings/settingsModel';
 
 export interface DataTableOptions {
     containerEl: HTMLElement;
-    plugin: LastPositionPlugin;
-    app: App;
+    context: DataTableContext;
     onDataChanged: () => void;
+}
+
+export interface DataTableContext {
+    app: App;
+    settings: LastPositionSettings;
+    positionStore: PositionStore;
+    persistPositionState: () => Promise<void>;
 }
 
 export class DataTable {
     private containerEl: HTMLElement;
-    private plugin: LastPositionPlugin;
-    private app: App;
+    private context: DataTableContext;
     private onDataChanged: () => void;
     private currentPage: number = 1;
     private static lastPage: number = 1; // 静态变量保存上次页码
@@ -24,8 +30,7 @@ export class DataTable {
 
     constructor(options: DataTableOptions) {
         this.containerEl = options.containerEl;
-        this.plugin = options.plugin;
-        this.app = options.app;
+        this.context = options.context;
         this.onDataChanged = options.onDataChanged;
         // 从静态变量恢复上次页码
         this.currentPage = DataTable.lastPage;
@@ -36,7 +41,7 @@ export class DataTable {
         const dataSection = this.containerEl.createDiv('data-table-section');
         dataSection.createEl('h3', { text: t.scrollData });
         dataSection.createEl('p', { text: t.scrollDataDesc });
-        let entries = Object.entries(this.plugin.positionStore.snapshot().files);
+        let entries = Object.entries(this.context.positionStore.snapshot().files);
 
         // 创建表格
         if (entries.length > 0) {
@@ -78,7 +83,7 @@ export class DataTable {
             entries = this.sortEntries(entries);
 
             const totalItems = entries.length;
-            const pageSize = this.plugin.settings.pageSize;
+            const pageSize = this.context.settings.pageSize;
             const totalPages = Math.ceil(totalItems / pageSize);
             
             // 确保当前页在有效范围内
@@ -109,11 +114,11 @@ export class DataTable {
                 const deleteBtn = actionCell.createEl('button', { text: t.delete });
                 deleteBtn.addEventListener('click', async () => {
                     // 使用确认对话框
-                    const confirmModal = new ConfirmModal(this.app, {message: t.confirmClearMessage + '-[' + filename + ']'});
+                    const confirmModal = new ConfirmModal(this.context.app, {message: t.confirmClearMessage + '-[' + filename + ']'});
                     const confirmed = await confirmModal.openAndAwait();
                     if (confirmed) {
-                        this.plugin.positionStore.deleteFile(filename);
-                        await this.plugin.persistPositionState();
+                        this.context.positionStore.deleteFile(filename);
+                        await this.context.persistPositionState();
                         this.onDataChanged(); // 通知父组件数据已更改
                     }
                 });

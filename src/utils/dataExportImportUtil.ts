@@ -1,16 +1,22 @@
 import { Notice } from 'obsidian';
 import { getTranslation } from '.language/translations';
-import LastPositionPlugin from 'src/main';
 import { parsePositionExport, serializePositionState } from '../storage/positionDataTransfer';
+import type { PositionState } from '../domain/positionTypes';
+import type { PositionStore } from '../storage/positionStore';
+
+export interface DataExportImportContext {
+    positionStore: PositionStore;
+    importPositionState: (state: PositionState) => Promise<void>;
+}
 
 export class DataExportImportUtil {
     /**
      * 导出滚动位置数据到版本化 JSON 文件
      * @param plugin 插件实例
      */
-    static exportData(plugin: LastPositionPlugin): void {
+    static exportData(context: DataExportImportContext): void {
         const t = getTranslation();
-        const positionState = plugin.positionStore.snapshot();
+        const positionState = context.positionStore.snapshot();
         if (Object.keys(positionState.files).length === 0
             && Object.keys(positionState.leaves).length === 0
             && !Object.values(positionState.bookmarks).some(bookmarks => bookmarks.length > 0)) {
@@ -43,7 +49,7 @@ export class DataExportImportUtil {
      * @param plugin 插件实例
      * @param onComplete 导入完成后的回调函数
      */
-    static importData(plugin: LastPositionPlugin, onComplete: () => void): void {
+    static importData(context: DataExportImportContext, onComplete: () => void): void {
         const t = getTranslation();
         
         // 创建文件输入元素
@@ -66,7 +72,7 @@ export class DataExportImportUtil {
                 try {
                     const content = e.target?.result as string;
                     const imported = parsePositionExport(content);
-                    await plugin.importPositionState(imported.state);
+                    await context.importPositionState(imported.state);
                     onComplete();
                     new Notice(t.dataImported?.replace('{count}', imported.recordCount.toString()) ||
                               `Imported ${imported.recordCount} scroll position records`);
