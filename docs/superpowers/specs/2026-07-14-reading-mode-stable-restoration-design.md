@@ -22,12 +22,12 @@ Editing mode does not reproduce the issue because its editor scroll container re
 
 `RestorationScheduler.start()` keeps the existing maximum-apply-attempt semantics. When a read is within tolerance, it waits `intervalMs`, rechecks cancellation and target identity, and reads again. Only a second matching read returns `completed`.
 
-If the confirmation read is `undefined`, `NaN`, or otherwise non-finite, the scheduler treats the target as not ready and applies again while attempts remain. A finite change away from both the last applied height and the target retains the existing `interrupted` behavior, protecting user or native navigation. Coordinator-driven user scroll cancellation remains unchanged.
+While confirmation is pending, any read away from the target, including a finite zero or a non-finite value, means the renderer is not stable yet. The scheduler applies again while attempts remain. Outside the confirmation phase, a finite change away from both the last applied height and the target retains the existing `interrupted` behavior, protecting user or native navigation. Coordinator-driven user scroll cancellation remains unchanged.
 
 No persisted schema, settings, Obsidian adapter, or status-bar behavior changes.
 
 ## Testing
 
-Add a scheduler regression test whose first apply reaches the target, then becomes `NaN` before the confirmation interval, and whose second apply remains stable. The test must fail against the current immediate-completion behavior by observing only one apply, then pass with two applies and a `completed` result.
+Add scheduler regression tests whose first apply reaches the target, then becomes either zero or non-finite before the confirmation interval, and whose second apply remains stable. The tests must fail against premature or interrupted completion by observing only one apply, then pass with two applies and a `completed` result.
 
 Run the targeted scheduler test, the complete test suite, the production build, and `git diff --check`.

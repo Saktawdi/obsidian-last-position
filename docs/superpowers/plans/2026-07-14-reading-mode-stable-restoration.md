@@ -27,10 +27,10 @@
 - Consumes: `RestorationOptions.intervalMs`, `RestorationTarget.isCurrent()`, `readScroll()`, and `applyScroll()`.
 - Produces: unchanged `RestorationScheduler.start()` and `RestorationResult` interfaces with stricter `completed` semantics.
 
-- [ ] **Step 1: Write the failing regression test**
+- [x] **Step 1: Write the failing regression test**
 
 ```ts
-test('waits for a stable target when a late renderer reset invalidates the first apply', async () => {
+test('reapplies after a late renderer reset before completing', async () => {
 	let scroll = 0;
 	let applies = 0;
 	const scheduler = new RestorationScheduler();
@@ -40,7 +40,7 @@ test('waits for a stable target when a late renderer reset invalidates the first
 		applyScroll: value => {
 			scroll = value;
 			applies++;
-			if (applies === 1) setTimeout(() => { scroll = Number.NaN; }, 2);
+			if (applies === 1) setTimeout(() => { scroll = 0; }, 2);
 		},
 	}, { maxAttempts: 3, intervalMs: 5 });
 
@@ -48,21 +48,42 @@ test('waits for a stable target when a late renderer reset invalidates the first
 	assert.equal(applies, 2);
 	assert.equal(scroll, 20);
 });
+
+test('reapplies after a non-finite confirmation height', async () => {
+	for (const unstableHeight of [Number.NaN, Number.POSITIVE_INFINITY]) {
+		let scroll = 0;
+		let applies = 0;
+		const scheduler = new RestorationScheduler();
+		const result = await scheduler.start('leaf-a', 20, {
+			isCurrent: () => true,
+			readScroll: () => scroll,
+			applyScroll: value => {
+				scroll = value;
+				applies++;
+				if (applies === 1) setTimeout(() => { scroll = unstableHeight; }, 2);
+			},
+		}, { maxAttempts: 3, intervalMs: 5 });
+
+		assert.equal(result.reason, 'completed');
+		assert.equal(applies, 2);
+		assert.equal(scroll, 20);
+	}
+});
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
-Run: `npm test -- --test-name-pattern "late renderer reset"`
+Run: `node --import tsx --test --test-name-pattern "late renderer reset|non-finite confirmation" tests/position/restorationScheduler.test.ts`
 
-Expected: FAIL because the current scheduler returns `completed` after the first immediate match, so `applies` is `1`.
+Expected: FAIL because premature completion or interruption stops after the first apply, so `applies` is `1`.
 
-- [ ] **Step 3: Implement delayed completion confirmation**
+- [x] **Step 3: Implement delayed completion confirmation**
 
-Refactor the scheduler loop so an in-tolerance read waits one `intervalMs`, rechecks generation and target currency, and confirms the height before returning `completed`. Continue to another apply when the confirmation is invalid; retain `interrupted` for a finite external change.
+Refactor the scheduler loop so an in-tolerance read waits one `intervalMs`, rechecks generation and target currency, and confirms the height before returning `completed`. Continue to another apply when a pending confirmation reads zero or a non-finite value; retain `interrupted` for a finite external change outside the confirmation phase.
 
-- [ ] **Step 4: Verify GREEN and regressions**
+- [x] **Step 4: Verify GREEN and regressions**
 
-Run: `npm test -- --test-name-pattern "late renderer reset"`
+Run: `node --import tsx --test --test-name-pattern "late renderer reset|non-finite confirmation" tests/position/restorationScheduler.test.ts`
 
 Expected: PASS with two applies.
 
