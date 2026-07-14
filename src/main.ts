@@ -2,9 +2,6 @@ import { MarkdownView, Menu, Notice, Plugin, TFile, setTooltip } from 'obsidian'
 import { TRANSLATIONS, getLanguage, getTranslation } from '.language/translations';
 import { BookmarkNameModal, BookmarkSuggestModal } from './component/bookmarkModals';
 import { ConfirmModal } from './component/confirmedModal';
-import { LeafRegistry } from './obsidian/leafRegistry';
-import { ObsidianLeafSource } from './obsidian/obsidianLeafSource';
-import { AnchorSuppression } from './position/anchorSuppression';
 import { PositionCoordinator } from './position/positionCoordinator';
 import {
 	BOOKMARK_COMMAND_IDS,
@@ -20,8 +17,11 @@ import {
 } from './position/statusBarBookmarkActions';
 import { PositionStore, migratePositionState } from './storage/positionStore';
 import type { PositionState } from './domain/positionTypes';
-import { RestorationScheduler } from './position/restorationScheduler';
-import { SerializedTaskQueue } from './position/serializedTaskQueue';
+import { PositionPersistenceService } from './storage/positionPersistence';
+import {
+	createObsidianPositionCore,
+	ObsidianPositionCore,
+} from './adapters/obsidian/positionCoreFactory';
 import { ParsedSettingsData, parseSettingsData } from './position/settingsData';
 import { AutoSaveScrollSettingsTab, DEFAULT_SETTINGS, LastPositionSettings } from './setting';
 
@@ -30,7 +30,8 @@ export default class LastPositionPlugin extends Plugin {
 	statusBarItemEl: HTMLElement;
 	positionStore: PositionStore;
 	private coordinator?: PositionCoordinator<unknown, unknown>;
-	private readonly persistenceQueue = new SerializedTaskQueue();
+	private core?: ObsidianPositionCore;
+	private persistence?: PositionPersistenceService;
 	private flashStatusTimer?: ReturnType<typeof globalThis.setTimeout>;
 
 	async onload(): Promise<void> {
@@ -53,8 +54,8 @@ export default class LastPositionPlugin extends Plugin {
 
 	async onunload(): Promise<void> {
 		if (this.flashStatusTimer !== undefined) globalThis.clearTimeout(this.flashStatusTimer);
-		await this.coordinator?.dispose();
-		await this.persistenceQueue.flush();
+		await this.core?.dispose();
+		await this.persistence?.flush();
 	}
 
 	async loadSettings(): Promise<void> {
@@ -76,6 +77,14 @@ export default class LastPositionPlugin extends Plugin {
 			scrollHeightData: new Map(Object.entries(positionState.files)),
 		};
 		this.positionStore = new PositionStore(positionState);
+		this.persistence = new PositionPersistenceService(this.positionStore, {
+			getSettingsSnapshot: () => ({ ...this.settings }),
+			setPositionState: nextState => {
+				this.settings.positionState = nextState;
+				this.settings.scrollHeightData = new Map(Object.entries(nextState.files));
+			},
+			saveData: data => this.saveData(data),
+		});
 
 		if (shouldRepair || hadRemovedRestoreSettings) {
 			try {
@@ -87,16 +96,15 @@ export default class LastPositionPlugin extends Plugin {
 	}
 
 	async saveSettings(): Promise<void> {
-		await this.enqueuePositionPersistence();
-	}
-
-	async importPositionState(imported: PositionState): Promise<void> {
-		this.positionStore.merge(imported);
 		await this.persistPositionState();
 	}
 
+	async importPositionState(imported: PositionState): Promise<void> {
+		await this.getPersistence().importState(imported);
+	}
+
 	async persistPositionState(): Promise<void> {
-		await this.enqueuePositionPersistence();
+		await this.getPersistence().persist();
 	}
 
 	flashStatusBar(): void {
@@ -127,19 +135,10 @@ export default class LastPositionPlugin extends Plugin {
 	}
 
 	private initializeCoordinator(): void {
-		const source = new ObsidianLeafSource(this.app);
-		const registry = new LeafRegistry(source);
-		const scheduler = new RestorationScheduler();
-		const anchorSuppression = new AnchorSuppression(
-			Math.max(1500, this.settings.restoreDelayMs + 500),
-		);
 		const t = getTranslation();
-
-		const coordinator = new PositionCoordinator({
-			registry,
+		const core = createObsidianPositionCore({
+			app: this.app,
 			store: this.positionStore,
-			scheduler,
-			anchorSuppression,
 			maxAttempts: () => this.settings.myRetryCount,
 			restoreIntervalMs: () => this.settings.restoreIntervalMs,
 			debounceMs: () => this.settings.myInterval * 1000,
@@ -153,10 +152,11 @@ export default class LastPositionPlugin extends Plugin {
 				console.error('[Last-Position-Plugin]: Failed to save scroll positions', error);
 			},
 		});
-
+		this.core = core;
+		const coordinator = core.getCoordinator();
 		this.coordinator = coordinator as PositionCoordinator<unknown, unknown>;
 		this.registerBookmarkCommands(coordinator);
-		coordinator.start(this.app.workspace.activeLeaf);
+		core.start(this.app.workspace.activeLeaf);
 		this.registerEvent(this.app.workspace.on('active-leaf-change', leaf => {
 			coordinator.handleActiveLeafChange(leaf);
 		}));
@@ -366,6 +366,11 @@ export default class LastPositionPlugin extends Plugin {
 		this.statusBarItemEl.setText(`${t.currentHeight}: ${height.toFixed(0)}`);
 	}
 
+	private getPersistence(): PositionPersistenceService {
+		if (!this.persistence) throw new Error('Position persistence is not initialized');
+		return this.persistence;
+	}
+
 	private async readSettingsData(): Promise<ParsedSettingsData> {
 		const pluginDirectory = this.manifest.dir
 			?? `${this.app.vault.configDir}/plugins/${this.manifest.id}`;
@@ -382,16 +387,4 @@ export default class LastPositionPlugin extends Plugin {
 		}
 	}
 
-	private enqueuePositionPersistence(): Promise<void> {
-		return this.persistenceQueue.enqueue(async () => {
-			const positionState = this.positionStore.snapshot();
-			this.settings.positionState = positionState;
-			this.settings.scrollHeightData = new Map(Object.entries(positionState.files));
-			await this.saveData({
-				...this.settings,
-				positionState,
-				scrollHeightData: positionState.files,
-			});
-		});
-	}
 }
