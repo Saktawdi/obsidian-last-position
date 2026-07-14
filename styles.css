@@ -1,0 +1,20 @@
+.last-position-status-bar {
+	cursor: pointer;
+	border-radius: 3px;
+	transition: color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
+}
+
+.last-position-status-bar:hover,
+.last-position-status-bar:focus-visible {
+	color: var(--text-accent);
+	background-color: var(--background-modifier-hover);
+	box-shadow: 0 0 0 1px var(--background-modifier-border);
+}
+
+.last-position-status-bar:active {
+	background-color: var(--background-modifier-active-hover);
+}
+
+.last-position-status-bar-flash {
+	color: var(--text-success, #50fa7b) !important;
+}

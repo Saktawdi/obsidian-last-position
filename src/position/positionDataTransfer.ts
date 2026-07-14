@@ -1,5 +1,6 @@
 import {
 	mergePositionStates,
+	PositionBookmark,
 	PositionState,
 	ScrollPositionRecord,
 } from './positionStore';
@@ -62,6 +63,11 @@ function validateTimestamp(value: unknown, fallback: number, label: string): num
 	return value;
 }
 
+function validateRequiredTimestamp(value: unknown, label: string): number {
+	if (value === undefined) throw new PositionImportError(`Invalid ${label} timestamp`);
+	return validateTimestamp(value, 0, label);
+}
+
 function parsePositionRecord(value: unknown, now: number, label: string): ScrollPositionRecord {
 	const record = asRecord(value);
 	if (!record) throw new PositionImportError(`Invalid ${label} record`);
@@ -69,6 +75,23 @@ function parsePositionRecord(value: unknown, now: number, label: string): Scroll
 	return {
 		height: validateHeight(record.height, label),
 		lastAccessed: validateTimestamp(record.lastAccessed, now, label),
+	};
+}
+
+function parseBookmarkRecord(value: unknown, label: string): PositionBookmark {
+	const record = asRecord(value);
+	if (!record) throw new PositionImportError(`Invalid ${label} record`);
+
+	if (typeof record.name !== 'string'
+		|| record.name.trim().length === 0
+		|| record.name.includes('\0')) {
+		throw new PositionImportError(`Invalid ${label} name`);
+	}
+
+	return {
+		name: record.name.trim(),
+		height: validateHeight(record.height, label),
+		createdAt: validateRequiredTimestamp(record.createdAt, label),
 	};
 }
 
@@ -84,11 +107,17 @@ function parseVersionedState(value: UnknownRecord, now: number): PositionImportR
 	if (!files) throw new PositionImportError('Invalid position export files');
 	const leaves = asRecord(value.leaves);
 	if (!leaves) throw new PositionImportError('Invalid position export leaves');
+	const bookmarksValue = value.bookmarks;
+	if (bookmarksValue !== undefined && !asRecord(bookmarksValue)) {
+		throw new PositionImportError('Invalid position export bookmarks');
+	}
+	const bookmarks = asRecord(bookmarksValue) ?? {};
 
 	const state: PositionState = {
 		version: POSITION_EXPORT_VERSION,
 		files: {},
 		leaves: {},
+		bookmarks: {},
 	};
 
 	for (const [path, record] of Object.entries(files)) {
@@ -106,6 +135,16 @@ function parseVersionedState(value: UnknownRecord, now: number): PositionImportR
 		});
 	}
 
+	for (const [path, value] of Object.entries(bookmarks)) {
+		const validPath = validatePath(path, 'bookmark file');
+		if (!Array.isArray(value)) {
+			throw new PositionImportError(`Invalid bookmarks for ${validPath}`);
+		}
+		const records = value.map((bookmark, index) =>
+			parseBookmarkRecord(bookmark, `bookmark ${validPath} at index ${index}`));
+		setOwn(state.bookmarks, validPath, records);
+	}
+
 	return {
 		state,
 		source: 'version-2',
@@ -118,6 +157,7 @@ function parseLegacyArray(value: unknown[], now: number): PositionImportResult {
 		version: POSITION_EXPORT_VERSION,
 		files: {},
 		leaves: {},
+		bookmarks: {},
 	};
 
 	for (const [index, item] of value.entries()) {
@@ -139,6 +179,7 @@ function parseLegacyMap(legacyMap: UnknownRecord, now: number): PositionImportRe
 		version: POSITION_EXPORT_VERSION,
 		files: {},
 		leaves: {},
+		bookmarks: {},
 	};
 
 	for (const [path, value] of Object.entries(legacyMap)) {
@@ -166,6 +207,7 @@ export function serializePositionState(state: PositionState): string {
 		version: POSITION_EXPORT_VERSION,
 		files: state.files,
 		leaves: state.leaves,
+		bookmarks: state.bookmarks ?? {},
 	}, null, 2);
 }
 

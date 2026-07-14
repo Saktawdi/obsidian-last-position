@@ -16,6 +16,9 @@ test('round-trips the versioned export with file and leaf records', () => {
 		leaves: {
 			'leaf-a': { filePath: 'note.md', height: 140, lastAccessed: 20 },
 		},
+		bookmarks: {
+			'note.md': [{ name: 'Reading', height: 120, createdAt: 30 }],
+		},
 	};
 
 	const parsed = parsePositionExport(serializePositionState(state), 100);
@@ -79,6 +82,45 @@ test('rejects invalid paths and malformed JSON', () => {
 	assert.throws(() => parsePositionExport('{'), /invalid JSON/i);
 });
 
+test('normalizes v2 exports that predate bookmarks', () => {
+	const parsed = parsePositionExport(JSON.stringify({
+		format: 'obsidian-last-position',
+		version: 2,
+		files: {},
+		leaves: {},
+	}), 100);
+
+	assert.deepEqual(parsed.state.bookmarks, {});
+});
+
+test('rejects invalid bookmark records in a versioned export', () => {
+	assert.throws(
+		() => parsePositionExport(JSON.stringify({
+			format: 'obsidian-last-position',
+			version: 2,
+			files: {},
+			leaves: {},
+			bookmarks: {
+				'note.md': [{ name: 'Bad', height: -1, createdAt: 1 }],
+			},
+		})),
+		/invalid.*bookmark/i,
+	);
+
+	assert.throws(
+		() => parsePositionExport(JSON.stringify({
+			format: 'obsidian-last-position',
+			version: 2,
+			files: {},
+			leaves: {},
+			bookmarks: {
+				'note.md': [{ name: 'Missing timestamp', height: 1 }],
+			},
+		})),
+		/invalid.*bookmark/i,
+	);
+});
+
 test('merges imported records without discarding unrelated current records', () => {
 	const current = {
 		version: 2,
@@ -88,6 +130,9 @@ test('merges imported records without discarding unrelated current records', () 
 		},
 		leaves: {
 			'leaf-current': { filePath: 'keep.md', height: 15, lastAccessed: 3 },
+		},
+		bookmarks: {
+			'keep.md': [{ name: 'Keep', height: 15, createdAt: 3 }],
 		},
 	};
 	const imported = {
@@ -99,6 +144,7 @@ test('merges imported records without discarding unrelated current records', () 
 		leaves: {
 			'leaf-imported': { filePath: 'imported.md', height: 35, lastAccessed: 5 },
 		},
+		bookmarks: {},
 	};
 
 	assert.deepEqual(mergePositionStates(current, imported), {
@@ -111,6 +157,9 @@ test('merges imported records without discarding unrelated current records', () 
 		leaves: {
 			'leaf-current': { filePath: 'keep.md', height: 15, lastAccessed: 3 },
 			'leaf-imported': { filePath: 'imported.md', height: 35, lastAccessed: 5 },
+		},
+		bookmarks: {
+			'keep.md': [{ name: 'Keep', height: 15, createdAt: 3 }],
 		},
 	});
 });

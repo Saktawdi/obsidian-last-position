@@ -7,10 +7,17 @@ export interface LeafPositionRecord extends ScrollPositionRecord {
 	filePath: string;
 }
 
+export interface PositionBookmark {
+	name: string;
+	height: number;
+	createdAt: number;
+}
+
 export interface PositionState {
 	version: 2;
 	files: Record<string, ScrollPositionRecord>;
 	leaves: Record<string, LeafPositionRecord>;
+	bookmarks: Record<string, PositionBookmark[]>;
 }
 
 export type LegacyPositionData = Record<string, number | Partial<ScrollPositionRecord>>;
@@ -20,6 +27,7 @@ export function emptyPositionState(): PositionState {
 		version: 2,
 		files: {},
 		leaves: {},
+		bookmarks: {},
 	};
 }
 
@@ -59,7 +67,47 @@ export function clonePositionState(state: PositionState): PositionState {
 		leaves: Object.fromEntries(
 			Object.entries(state.leaves).map(([leafId, record]) => [leafId, { ...record }]),
 		),
+		bookmarks: Object.fromEntries(
+			Object.entries(state.bookmarks ?? {}).map(([path, bookmarks]) => [
+				path,
+				bookmarks.map(bookmark => ({ ...bookmark })),
+			]),
+		),
 	};
+}
+
+function allocateBookmarkName(existing: Set<string>, requestedName: string): string {
+	let name = requestedName;
+	let suffix = 1;
+	while (existing.has(name)) {
+		name = `${requestedName} (${suffix++})`;
+	}
+	return name;
+}
+
+function mergeBookmarkRecords(
+	current: Record<string, PositionBookmark[]>,
+	incoming: Record<string, PositionBookmark[]>,
+): Record<string, PositionBookmark[]> {
+	const merged = Object.fromEntries(
+		Object.entries(current).map(([path, bookmarks]) => [
+			path,
+			bookmarks.map(bookmark => ({ ...bookmark })),
+		]),
+	) as Record<string, PositionBookmark[]>;
+
+	for (const [path, bookmarks] of Object.entries(incoming)) {
+		const existing = merged[path] ?? [];
+		const names = new Set(existing.map(bookmark => bookmark.name));
+		for (const bookmark of bookmarks) {
+			const name = allocateBookmarkName(names, bookmark.name);
+			names.add(name);
+			existing.push({ ...bookmark, name });
+		}
+		merged[path] = existing;
+	}
+
+	return merged;
 }
 
 export function mergePositionStates(current: PositionState, incoming: PositionState): PositionState {
@@ -73,6 +121,7 @@ export function mergePositionStates(current: PositionState, incoming: PositionSt
 			...current.leaves,
 			...incoming.leaves,
 		},
+		bookmarks: mergeBookmarkRecords(current.bookmarks ?? {}, incoming.bookmarks ?? {}),
 	};
 }
 
@@ -104,6 +153,26 @@ function readVersionedState(value: unknown, now: number): PositionState | undefi
 			height: record.height,
 			lastAccessed: normalizeTimestamp(record.lastAccessed, now),
 		});
+	}
+
+	if (isRecord(candidate.bookmarks)) {
+		for (const [path, records] of Object.entries(candidate.bookmarks)) {
+			if (!isValidPath(path) || !Array.isArray(records)) continue;
+			const bookmarks: PositionBookmark[] = [];
+			for (const value of records) {
+				if (!isRecord(value)
+					|| typeof value.name !== 'string'
+					|| value.name.trim().length === 0
+					|| !isValidHeight(value.height)
+					|| typeof value.createdAt !== 'number'
+					|| !Number.isFinite(value.createdAt)
+					|| value.createdAt < 0) continue;
+				const name = value.name.trim();
+				if (bookmarks.some(bookmark => bookmark.name === name)) continue;
+				bookmarks.push({ name, height: value.height, createdAt: value.createdAt });
+			}
+			if (bookmarks.length > 0) setOwn(state.bookmarks, path, bookmarks);
+		}
 	}
 
 	return state;
@@ -165,6 +234,57 @@ export class PositionStore {
 		this.state.files = migratePositionState(undefined, legacy, now).files;
 	}
 
+	saveBookmark(
+		filePath: string,
+		requestedName: string,
+		height: number,
+		now = Date.now(),
+	): PositionBookmark | undefined {
+		const name = requestedName.trim();
+		if (!isValidPath(filePath)
+			|| name.length === 0
+			|| name.includes('\0')
+			|| !isValidHeight(height)
+			|| !Number.isFinite(now)
+			|| now < 0) return undefined;
+
+		const bookmarks = this.state.bookmarks[filePath] ?? [];
+		const allocatedName = allocateBookmarkName(
+			new Set(bookmarks.map(bookmark => bookmark.name)),
+			name,
+		);
+		const bookmark = { name: allocatedName, height, createdAt: now };
+		setOwn(this.state.bookmarks, filePath, [...bookmarks, bookmark]);
+		return { ...bookmark };
+	}
+
+	listBookmarks(filePath: string): PositionBookmark[] {
+		return (this.state.bookmarks[filePath] ?? [])
+			.map(bookmark => ({ ...bookmark }))
+			.sort((left, right) => left.createdAt - right.createdAt || left.name.localeCompare(right.name));
+	}
+
+	deleteBookmark(filePath: string, target: PositionBookmark): boolean {
+		if (!isValidPath(filePath)) return false;
+		const bookmarks = this.state.bookmarks[filePath];
+		if (!bookmarks) return false;
+
+		const index = bookmarks.findIndex(bookmark =>
+			bookmark.name === target.name
+			&& bookmark.height === target.height
+			&& bookmark.createdAt === target.createdAt,
+		);
+		if (index < 0) return false;
+
+		const remaining = bookmarks.filter((_, bookmarkIndex) => bookmarkIndex !== index);
+		if (remaining.length === 0) {
+			delete this.state.bookmarks[filePath];
+		} else {
+			setOwn(this.state.bookmarks, filePath, remaining);
+		}
+		return true;
+	}
+
 	merge(incoming: PositionState): void {
 		this.state = mergePositionStates(this.state, incoming);
 	}
@@ -172,6 +292,10 @@ export class PositionStore {
 	deleteFile(filePath: string): boolean {
 		let deleted = Object.prototype.hasOwnProperty.call(this.state.files, filePath);
 		if (deleted) delete this.state.files[filePath];
+		if (Object.prototype.hasOwnProperty.call(this.state.bookmarks, filePath)) {
+			delete this.state.bookmarks[filePath];
+			deleted = true;
+		}
 		for (const [leafId, record] of Object.entries(this.state.leaves)) {
 			if (record.filePath !== filePath) continue;
 			delete this.state.leaves[leafId];

@@ -1,9 +1,23 @@
-import { MarkdownView, Notice, Plugin, TFile } from 'obsidian';
+import { MarkdownView, Menu, Notice, Plugin, TFile, setTooltip } from 'obsidian';
 import { TRANSLATIONS, getLanguage, getTranslation } from '.language/translations';
+import { BookmarkNameModal, BookmarkSuggestModal } from './component/bookmarkModals';
+import { ConfirmModal } from './component/confirmedModal';
 import { LeafRegistry } from './obsidian/leafRegistry';
 import { ObsidianLeafSource } from './obsidian/obsidianLeafSource';
 import { AnchorSuppression } from './position/anchorSuppression';
 import { PositionCoordinator } from './position/positionCoordinator';
+import {
+	BOOKMARK_COMMAND_IDS,
+	formatBookmarkSavedNotice,
+	getBookmarkCommandNames,
+} from './position/bookmarkCommands';
+import {
+	getStatusBarBookmarkAction,
+	getStatusBarBookmarkTooltip,
+	STATUS_BAR_BOOKMARK_ACTIONS,
+	STATUS_BAR_BOOKMARK_CLASS,
+	STATUS_BAR_BOOKMARK_FLASH_CLASS,
+} from './position/statusBarBookmarkActions';
 import { PositionStore, migratePositionState } from './position/positionStore';
 import type { PositionState } from './position/positionStore';
 import { RestorationScheduler } from './position/restorationScheduler';
@@ -17,6 +31,7 @@ export default class LastPositionPlugin extends Plugin {
 	positionStore: PositionStore;
 	private coordinator?: PositionCoordinator<unknown, unknown>;
 	private readonly persistenceQueue = new SerializedTaskQueue();
+	private flashStatusTimer?: ReturnType<typeof globalThis.setTimeout>;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -27,7 +42,9 @@ export default class LastPositionPlugin extends Plugin {
 		}
 
 		this.statusBarItemEl = this.addStatusBarItem();
+		this.setupStatusBarBookmarkPresentation();
 		this.updateStatusBar(0);
+		this.registerStatusBarBookmarkActions();
 		this.addSettingTab(new AutoSaveScrollSettingsTab(this.app, this));
 
 		if (this.settings.enableAutoCleanup) this.cleanupOldData();
@@ -35,6 +52,7 @@ export default class LastPositionPlugin extends Plugin {
 	}
 
 	async onunload(): Promise<void> {
+		if (this.flashStatusTimer !== undefined) globalThis.clearTimeout(this.flashStatusTimer);
 		await this.coordinator?.dispose();
 		await this.persistenceQueue.flush();
 	}
@@ -82,11 +100,12 @@ export default class LastPositionPlugin extends Plugin {
 	}
 
 	flashStatusBar(): void {
-		const originalColor = this.statusBarItemEl.style.color;
-		this.statusBarItemEl.style.color = 'var(--text-success, #50fa7b)';
-		globalThis.setTimeout(() => {
-			this.statusBarItemEl.style.color = originalColor;
-		}, 500);
+		this.statusBarItemEl.addClass(STATUS_BAR_BOOKMARK_FLASH_CLASS);
+		if (this.flashStatusTimer !== undefined) globalThis.clearTimeout(this.flashStatusTimer);
+		this.flashStatusTimer = globalThis.setTimeout(() => {
+			this.statusBarItemEl.removeClass(STATUS_BAR_BOOKMARK_FLASH_CLASS);
+			this.flashStatusTimer = undefined;
+		}, 900);
 	}
 
 	cleanupOldData(): void {
@@ -136,6 +155,7 @@ export default class LastPositionPlugin extends Plugin {
 		});
 
 		this.coordinator = coordinator as PositionCoordinator<unknown, unknown>;
+		this.registerBookmarkCommands(coordinator);
 		coordinator.start(this.app.workspace.activeLeaf);
 		this.registerEvent(this.app.workspace.on('active-leaf-change', leaf => {
 			coordinator.handleActiveLeafChange(leaf);
@@ -147,6 +167,180 @@ export default class LastPositionPlugin extends Plugin {
 			coordinator.reconcile();
 		}));
 		this.registerDomEvent(document, 'click', event => this.handleInternalLinkClick(event), true);
+	}
+
+	private registerBookmarkCommands(coordinator: PositionCoordinator<unknown, unknown>): void {
+		const t = getTranslation();
+		const names = getBookmarkCommandNames(t);
+
+		this.addCommand({
+			id: BOOKMARK_COMMAND_IDS.save,
+			name: names.save,
+			callback: () => this.openBookmarkSaveModal(coordinator),
+		});
+
+		this.addCommand({
+			id: BOOKMARK_COMMAND_IDS.select,
+			name: names.select,
+			callback: () => {
+				const position = coordinator.getActivePosition();
+				if (!position) {
+					new Notice(t.noActiveView);
+					return;
+				}
+
+				const bookmarks = this.positionStore.listBookmarks(position.filePath);
+				if (bookmarks.length === 0) {
+					new Notice(t.noBookmarks);
+					return;
+				}
+
+				new BookmarkSuggestModal(this.app, bookmarks, bookmark => {
+					if (!coordinator.scrollActiveTo(position.filePath, bookmark.height)) {
+						new Notice(t.bookmarkStale);
+					}
+				}).open();
+			},
+		});
+
+		this.addCommand({
+			id: BOOKMARK_COMMAND_IDS.remove,
+			name: names.remove,
+			callback: () => this.openBookmarkDeleteModal(coordinator),
+		});
+	}
+
+	private registerStatusBarBookmarkActions(): void {
+		this.registerDomEvent(this.statusBarItemEl, 'click', () => {
+			if (!this.coordinator) return;
+			if (getStatusBarBookmarkAction({ type: 'click' }) !== STATUS_BAR_BOOKMARK_ACTIONS.save) return;
+			this.openBookmarkSaveModal(this.coordinator);
+		});
+		this.registerDomEvent(this.statusBarItemEl, 'contextmenu', event => {
+			event.preventDefault();
+			if (!this.coordinator) return;
+			if (getStatusBarBookmarkAction({ type: 'contextmenu' })
+				!== STATUS_BAR_BOOKMARK_ACTIONS.openList) return;
+			this.openBookmarkMenu(this.coordinator, event);
+		});
+	}
+
+	private setupStatusBarBookmarkPresentation(): void {
+		const t = getTranslation();
+		this.statusBarItemEl.addClass(STATUS_BAR_BOOKMARK_CLASS);
+		setTooltip(this.statusBarItemEl, getStatusBarBookmarkTooltip({
+			saveBookmark: t.statusBarSaveBookmarkHint,
+			openBookmarkList: t.statusBarOpenBookmarkListHint,
+		}), {
+			placement: 'top',
+			delay: 300,
+		});
+	}
+
+	private openBookmarkSaveModal(coordinator: PositionCoordinator<unknown, unknown>): void {
+		const t = getTranslation();
+		const position = coordinator.getActivePosition();
+		if (!position) {
+			new Notice(t.noActiveView);
+			return;
+		}
+
+		new BookmarkNameModal(this.app, name => {
+			const bookmark = this.positionStore.saveBookmark(
+				position.filePath,
+				name,
+				position.height,
+			);
+			if (!bookmark) return;
+
+			void this.persistPositionState()
+				.then(() => {
+					new Notice(formatBookmarkSavedNotice(t.bookmarkSaved, bookmark));
+					this.flashStatusBar();
+				})
+				.catch(error => {
+					console.error('[Last-Position-Plugin]: Failed to save bookmark', error);
+					new Notice(t.bookmarkSaveFailed);
+				});
+		}).open();
+	}
+
+	private openBookmarkMenu(
+		coordinator: PositionCoordinator<unknown, unknown>,
+		event: MouseEvent,
+	): void {
+		const t = getTranslation();
+		const position = coordinator.getActivePosition();
+		if (!position) {
+			new Notice(t.noActiveView);
+			return;
+		}
+
+		const bookmarks = this.positionStore.listBookmarks(position.filePath);
+		if (bookmarks.length === 0) {
+			new Notice(t.noBookmarks);
+			return;
+		}
+
+		const menu = new Menu();
+		for (const bookmark of bookmarks) {
+			menu.addItem(item => item
+				.setTitle(`${bookmark.name} (${Math.round(bookmark.height)})`)
+				.onClick(() => {
+					if (!coordinator.scrollActiveTo(position.filePath, bookmark.height)) {
+						new Notice(t.bookmarkStale);
+					}
+				}));
+		}
+		menu.showAtMouseEvent(event);
+	}
+
+	private openBookmarkDeleteModal(coordinator: PositionCoordinator<unknown, unknown>): void {
+		const t = getTranslation();
+		const position = coordinator.getActivePosition();
+		if (!position) {
+			new Notice(t.noActiveView);
+			return;
+		}
+
+		const bookmarks = this.positionStore.listBookmarks(position.filePath);
+		if (bookmarks.length === 0) {
+			new Notice(t.noBookmarks);
+			return;
+		}
+
+		new BookmarkSuggestModal(this.app, bookmarks, bookmark => {
+			const message = t.bookmarkDeleteConfirmMessage
+				.replace('{name}', bookmark.name)
+				.replace('{height}', Math.round(bookmark.height).toString());
+			const confirmModal = new ConfirmModal(this.app, {
+				title: t.bookmarkDeleteConfirmTitle,
+				message,
+			});
+
+			void confirmModal.openAndAwait().then(async confirmed => {
+				if (!confirmed) return;
+				const current = coordinator.getActivePosition();
+				if (!current || current.filePath !== position.filePath) {
+					new Notice(t.bookmarkStale);
+					return;
+				}
+
+				if (!this.positionStore.deleteBookmark(position.filePath, bookmark)) {
+					new Notice(t.bookmarkStale);
+					return;
+				}
+
+				try {
+					await this.persistPositionState();
+					new Notice(t.bookmarkDeleted.replace('{name}', bookmark.name));
+					this.flashStatusBar();
+				} catch (error) {
+					console.error('[Last-Position-Plugin]: Failed to delete bookmark', error);
+					new Notice(t.bookmarkDeleteFailed);
+				}
+			});
+		}).open();
 	}
 
 	private handleInternalLinkClick(event: MouseEvent): void {
