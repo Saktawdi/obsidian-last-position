@@ -6,6 +6,7 @@ export interface LastPositionSettings {
 	myRetryCount: number;
 	restoreIntervalMs: number;
 	restoreDelayMs: number;
+	enableSmartRestoreDelay: boolean;
 	positionState: PositionState;
 	scrollHeightData: Map<string, ScrollPositionData>;
 	listenEvent: string;
@@ -25,6 +26,7 @@ export const DEFAULT_SETTINGS: LastPositionSettings = {
 	myRetryCount: 30,
 	restoreIntervalMs: 100,
 	restoreDelayMs: 300,
+	enableSmartRestoreDelay: false,
 	positionState: emptyPositionState(),
 	scrollHeightData: new Map<string, ScrollPositionData>(),
 	listenEvent: 'mouseover',

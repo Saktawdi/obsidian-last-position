@@ -142,6 +142,7 @@ export default class LastPositionPlugin extends Plugin {
 			restoreIntervalMs: () => this.settings.restoreIntervalMs,
 			debounceMs: () => this.settings.myInterval * 1000,
 			restoreDelayMs: () => this.settings.restoreDelayMs,
+			enableSmartRestoreDelay: () => this.settings.enableSmartRestoreDelay,
 			persist: () => this.persistPositionState(),
 			updateStatus: height => this.updateStatusBar(height),
 			onRestoreExpired: details => {

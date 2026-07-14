@@ -17,6 +17,11 @@ export interface ActivePosition {
 	height: number;
 }
 
+export interface RestoreDelayContext<TLeaf, TView> {
+	source?: RegisteredLeaf<TLeaf, TView>;
+	target: RegisteredLeaf<TLeaf, TView>;
+}
+
 export interface PositionCoordinatorOptions<TLeaf, TView> {
 	registry: LeafRegistry<TLeaf, TView>;
 	store: PositionStore;
@@ -25,7 +30,10 @@ export interface PositionCoordinatorOptions<TLeaf, TView> {
 	maxAttempts: () => number;
 	restoreIntervalMs?: () => number;
 	debounceMs: () => number;
-	restoreDelayMs: () => number;
+	resolveRestoreDelayMs: (
+		context: RestoreDelayContext<TLeaf, TView>,
+	) => number | Promise<number>;
+	now?: () => number;
 	persist: () => Promise<void>;
 	updateStatus: (height: number) => void;
 	onRestoreExpired: (details: RestoreExpiryDetails) => void;
@@ -123,7 +131,10 @@ export class PositionCoordinator<TLeaf, TView> {
 		this.reconcileLeaves();
 		this.activeRecord = this.options.registry.describe(leaf);
 		if (this.activeRecord) {
-			this.scheduleRestore(this.activeRecord, true);
+			const source = previousRecord?.leafId === this.activeRecord.leafId
+				? previousRecord
+				: undefined;
+			this.scheduleRestore(this.activeRecord, true, source);
 		}
 	}
 
@@ -135,11 +146,15 @@ export class PositionCoordinator<TLeaf, TView> {
 			this.activeRecord = record;
 			return;
 		}
-		if (this.activeRecord) {
-			this.flushPendingSave(this.activeRecord.leafId);
+		const previousRecord = this.activeRecord;
+		if (previousRecord) {
+			this.flushPendingSave(previousRecord.leafId);
 		}
 		this.activeRecord = record;
-		this.scheduleRestore(record, true);
+		const source = previousRecord?.leafId === record.leafId
+			? previousRecord
+			: undefined;
+		this.scheduleRestore(record, true, source);
 	}
 
 	markAnchorNavigation(filePath: string): void {
@@ -272,6 +287,7 @@ export class PositionCoordinator<TLeaf, TView> {
 	private scheduleRestore(
 		record: RegisteredLeaf<TLeaf, TView>,
 		consumeSuppression: boolean,
+		source?: RegisteredLeaf<TLeaf, TView>,
 	): void {
 		this.cancelRestore(record.leafId);
 		this.modeHandoffs.delete(record.leafId);
@@ -282,27 +298,53 @@ export class PositionCoordinator<TLeaf, TView> {
 
 		const run = (this.restorationRuns.get(record.leafId) ?? 0) + 1;
 		this.restorationRuns.set(record.leafId, run);
-		const timer = globalThis.setTimeout(() => {
-			if (this.disposed || this.restorationRuns.get(record.leafId) !== run) return;
-			this.restoreTimers.delete(record.leafId);
-			if (!this.options.registry.isCurrent(record)) return;
-			if (this.disposed || this.restorationRuns.get(record.leafId) !== run) return;
-			this.restoring.add(record.leafId);
-			void this.options.scheduler.start(record.leafId, saved.height, {
-				isCurrent: () => this.options.registry.isCurrent(record),
-				readScroll: () => this.options.registry.readScroll(record),
-				applyScroll: height => this.options.registry.applyScroll(record, height),
-			}, {
-				maxAttempts: this.options.maxAttempts(),
-				intervalMs: this.options.restoreIntervalMs?.() ?? 100,
-			}).then(result => this.handleRestoreResult(record, saved.height, result, run))
-				.finally(() => {
-					if (this.restorationRuns.get(record.leafId) === run) {
-						this.restoring.delete(record.leafId);
-					}
-				});
-		}, Math.max(0, this.options.restoreDelayMs()));
-		this.restoreTimers.set(record.leafId, timer);
+		const requestedAt = this.options.now?.() ?? Date.now();
+		void Promise.resolve()
+			.then(() => this.options.resolveRestoreDelayMs({ source, target: record }))
+			.catch(() => 0)
+			.then(delayMs => {
+				if (this.disposed
+					|| this.restorationRuns.get(record.leafId) !== run
+					|| !this.options.registry.isCurrent(record)) return;
+
+				const selectedDelayMs = Number.isFinite(delayMs) ? Math.max(0, delayMs) : 0;
+				const elapsedMs = (this.options.now?.() ?? Date.now()) - requestedAt;
+				const remainingDelayMs = Math.max(0, selectedDelayMs - elapsedMs);
+				const startRestore = () => this.startRestore(record, saved.height, run);
+				if (remainingDelayMs <= 0) {
+					startRestore();
+					return;
+				}
+
+				const timer = globalThis.setTimeout(startRestore, remainingDelayMs);
+				this.restoreTimers.set(record.leafId, timer);
+			});
+	}
+
+	private startRestore(
+		record: RegisteredLeaf<TLeaf, TView>,
+		targetHeight: number,
+		run: number,
+	): void {
+		if (this.disposed || this.restorationRuns.get(record.leafId) !== run) return;
+		this.restoreTimers.delete(record.leafId);
+		if (!this.options.registry.isCurrent(record)) return;
+		if (this.disposed || this.restorationRuns.get(record.leafId) !== run) return;
+
+		this.restoring.add(record.leafId);
+		void this.options.scheduler.start(record.leafId, targetHeight, {
+			isCurrent: () => this.options.registry.isCurrent(record),
+			readScroll: () => this.options.registry.readScroll(record),
+			applyScroll: height => this.options.registry.applyScroll(record, height),
+		}, {
+			maxAttempts: this.options.maxAttempts(),
+			intervalMs: this.options.restoreIntervalMs?.() ?? 100,
+		}).then(result => this.handleRestoreResult(record, targetHeight, result, run))
+			.finally(() => {
+				if (this.restorationRuns.get(record.leafId) === run) {
+					this.restoring.delete(record.leafId);
+				}
+			});
 	}
 
 	private handleRestoreResult(

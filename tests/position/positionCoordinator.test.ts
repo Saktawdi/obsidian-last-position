@@ -7,7 +7,10 @@ import {
 	type ScrollEventDetails,
 } from '../../src/obsidian/leafRegistry';
 import { AnchorSuppression } from '../../src/position/anchorSuppression';
-import { PositionCoordinator } from '../../src/position/positionCoordinator';
+import {
+	PositionCoordinator,
+	type RestoreDelayContext,
+} from '../../src/position/positionCoordinator';
 import { PositionStore } from '../../src/position/positionStore';
 import { RestorationScheduler } from '../../src/position/restorationScheduler';
 
@@ -108,10 +111,18 @@ function nextTurn(): Promise<void> {
 	return new Promise(resolve => setTimeout(resolve, 5));
 }
 
+interface CoordinatorOverrides {
+	resolveRestoreDelayMs?: (
+		context: RestoreDelayContext<FakeLeaf, FakeView>,
+	) => number | Promise<number>;
+	now?: () => number;
+}
+
 function createCoordinator(
 	source: CoordinatorLeafSource,
 	store: PositionStore,
 	restoreDelayMs = 0,
+	overrides: CoordinatorOverrides = {},
 ) {
 	let persists = 0;
 	const statusHeights: number[] = [];
@@ -123,7 +134,8 @@ function createCoordinator(
 		maxAttempts: () => 3,
 		restoreIntervalMs: () => 0,
 		debounceMs: () => 0,
-		restoreDelayMs: () => restoreDelayMs,
+		resolveRestoreDelayMs: overrides.resolveRestoreDelayMs ?? (() => restoreDelayMs),
+		now: overrides.now,
 		persist: async () => {
 			persists++;
 		},
@@ -136,6 +148,75 @@ function createCoordinator(
 		getStatusHeights: () => [...statusHeights],
 	};
 }
+
+test('waits for a resolved restore delay before applying the saved position', async () => {
+	const source = new CoordinatorLeafSource();
+	const store = new PositionStore();
+	store.save('leaf-a', 'a.md', 60, 1);
+	let resolveDelay: (delay: number) => void = () => {};
+	const delay = new Promise<number>(resolve => {
+		resolveDelay = resolve;
+	});
+	const { coordinator } = createCoordinator(source, store, 0, {
+		resolveRestoreDelayMs: () => delay,
+	});
+
+	coordinator.start(source.leaves[0].leaf);
+	await nextTurn();
+	assert.deepEqual(source.appliedHeights, []);
+
+	resolveDelay(0);
+	await nextTurn();
+	assert.deepEqual(source.appliedHeights, [60]);
+	await coordinator.dispose();
+});
+
+test('subtracts delay resolution time from the selected restore delay', async () => {
+	const source = new CoordinatorLeafSource();
+	const store = new PositionStore();
+	store.save('leaf-a', 'a.md', 60, 1);
+	const nowValues = [100, 120];
+	const { coordinator } = createCoordinator(source, store, 0, {
+		resolveRestoreDelayMs: async () => 30,
+		now: () => nowValues.shift() ?? 120,
+	});
+
+	coordinator.start(source.leaves[0].leaf);
+	await new Promise(resolve => setTimeout(resolve, 5));
+	assert.deepEqual(source.appliedHeights, []);
+	await new Promise(resolve => setTimeout(resolve, 15));
+	assert.deepEqual(source.appliedHeights, [60]);
+	await coordinator.dispose();
+});
+
+test('discards an unresolved restore delay after the same leaf opens another file', async () => {
+	const source = new CoordinatorLeafSource();
+	const store = new PositionStore();
+	store.save('leaf-a', 'a.md', 60, 1);
+	store.save('leaf-a', 'b.md', 80, 1);
+	let resolveFirst: (delay: number) => void = () => {};
+	let calls = 0;
+	const { coordinator } = createCoordinator(source, store, 0, {
+		resolveRestoreDelayMs: () => {
+			calls++;
+			if (calls > 1) return 0;
+			return new Promise<number>(resolve => {
+				resolveFirst = resolve;
+			});
+		},
+	});
+
+	coordinator.start(source.leaves[0].leaf);
+	await nextTurn();
+	source.openFile('leaf-a', 'b.md');
+	coordinator.handleFileOpen(source.leaves[0].leaf);
+	await nextTurn();
+	resolveFirst(0);
+	await nextTurn();
+
+	assert.deepEqual(source.appliedHeights, [80]);
+	await coordinator.dispose();
+});
 
 test('updates the displayed height after a successful restoration', async () => {
 	const source = new CoordinatorLeafSource();

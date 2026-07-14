@@ -22,6 +22,8 @@ export interface Translation {
     restoreInterval: string;
     restoreIntervalDesc: string;
     inputRestoreInterval: string;
+    smartRestoreDelay: string;
+    smartRestoreDelayDesc: string;
     restoreDelay: string;
     restoreDelayDesc: string;
     inputRestoreDelay: string;
@@ -102,6 +104,8 @@ export const TRANSLATIONS: Record<string, Translation> = {
         restoreInterval: '恢复重试间隔',
         restoreIntervalDesc: '恢复失败后的重试间隔，单位毫秒，默认100毫秒',
         inputRestoreInterval: '输入重试间隔（毫秒）',
+        smartRestoreDelay: '智能恢复延迟（Beta）',
+        smartRestoreDelayDesc: '根据来源和目标文章的字数自动计算恢复延迟；开启后忽略下方的固定恢复延迟',
         restoreDelay: '恢复延迟',
         restoreDelayDesc: '打开笔记后等待多少毫秒再恢复位置，默认300毫秒',
         inputRestoreDelay: '输入恢复延迟（毫秒）',
@@ -179,6 +183,8 @@ export const TRANSLATIONS: Record<string, Translation> = {
         restoreInterval: 'Restore Retry Interval',
         restoreIntervalDesc: 'Delay between restore attempts in milliseconds. Default is 100.',
         inputRestoreInterval: 'Enter retry interval (milliseconds)',
+        smartRestoreDelay: 'Smart Restore Delay (Beta)',
+        smartRestoreDelayDesc: 'Calculate the restore delay from the source and target note lengths. When enabled, the fixed delay below is ignored.',
         restoreDelay: 'Restore Delay',
         restoreDelayDesc: 'Wait before restoring a note position, in milliseconds. Default is 300.',
         inputRestoreDelay: 'Enter restore delay (milliseconds)',

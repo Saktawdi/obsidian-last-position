@@ -70,11 +70,24 @@ export class AutoSaveScrollSettingsTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
+			.setName(t.smartRestoreDelay)
+			.setDesc(t.smartRestoreDelayDesc)
+			.addToggle(toggle => toggle
+				.setValue(this.context.settings.enableSmartRestoreDelay)
+				.onChange(async value => {
+					this.context.settings.enableSmartRestoreDelay = value;
+					await this.context.saveSettings();
+					this.display();
+					new Notice(t.changeSuccess);
+				}));
+
+		new Setting(containerEl)
 			.setName(t.restoreDelay)
 			.setDesc(t.restoreDelayDesc)
 			.addText(text => text
 				.setPlaceholder(t.inputRestoreDelay)
 				.setValue(this.context.settings.restoreDelayMs.toString())
+				.setDisabled(this.context.settings.enableSmartRestoreDelay)
 				.onChange(async value => {
 					const delay = Number(value);
 					if (!Number.isFinite(delay) || delay < 0) return;
