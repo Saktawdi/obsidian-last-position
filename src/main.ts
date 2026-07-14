@@ -1,13 +1,6 @@
-import { MarkdownView, Menu, Notice, Plugin, TFile, setTooltip } from 'obsidian';
+import { MarkdownView, Notice, Plugin, TFile, setTooltip } from 'obsidian';
 import { TRANSLATIONS, getLanguage, getTranslation } from '.language/translations';
-import { BookmarkNameModal, BookmarkSuggestModal } from './component/bookmarkModals';
-import { ConfirmModal } from './component/confirmedModal';
 import { PositionCoordinator } from './position/positionCoordinator';
-import {
-	BOOKMARK_COMMAND_IDS,
-	formatBookmarkSavedNotice,
-	getBookmarkCommandNames,
-} from './position/bookmarkCommands';
 import {
 	getStatusBarBookmarkAction,
 	getStatusBarBookmarkTooltip,
@@ -22,6 +15,8 @@ import {
 	createObsidianPositionCore,
 	ObsidianPositionCore,
 } from './adapters/obsidian/positionCoreFactory';
+import { BookmarkCommandController } from './commands/bookmarkCommands';
+import { CommandRegistry } from './commands/commandRegistry';
 import { ParsedSettingsData, parseSettingsData } from './position/settingsData';
 import { AutoSaveScrollSettingsTab, DEFAULT_SETTINGS, LastPositionSettings } from './setting';
 
@@ -32,6 +27,8 @@ export default class LastPositionPlugin extends Plugin {
 	private coordinator?: PositionCoordinator<unknown, unknown>;
 	private core?: ObsidianPositionCore;
 	private persistence?: PositionPersistenceService;
+	private commandRegistry?: CommandRegistry;
+	private bookmarkCommands?: BookmarkCommandController;
 	private flashStatusTimer?: ReturnType<typeof globalThis.setTimeout>;
 
 	async onload(): Promise<void> {
@@ -155,7 +152,15 @@ export default class LastPositionPlugin extends Plugin {
 		this.core = core;
 		const coordinator = core.getCoordinator();
 		this.coordinator = coordinator as PositionCoordinator<unknown, unknown>;
-		this.registerBookmarkCommands(coordinator);
+		this.bookmarkCommands = new BookmarkCommandController({
+			app: this.app,
+			store: this.positionStore,
+			getCoordinator: () => this.coordinator,
+			persist: () => this.persistPositionState(),
+			flashStatusBar: () => this.flashStatusBar(),
+		});
+		this.commandRegistry = new CommandRegistry([this.bookmarkCommands]);
+		this.commandRegistry.register(this);
 		core.start(this.app.workspace.activeLeaf);
 		this.registerEvent(this.app.workspace.on('active-leaf-change', leaf => {
 			coordinator.handleActiveLeafChange(leaf);
@@ -169,59 +174,16 @@ export default class LastPositionPlugin extends Plugin {
 		this.registerDomEvent(document, 'click', event => this.handleInternalLinkClick(event), true);
 	}
 
-	private registerBookmarkCommands(coordinator: PositionCoordinator<unknown, unknown>): void {
-		const t = getTranslation();
-		const names = getBookmarkCommandNames(t);
-
-		this.addCommand({
-			id: BOOKMARK_COMMAND_IDS.save,
-			name: names.save,
-			callback: () => this.openBookmarkSaveModal(coordinator),
-		});
-
-		this.addCommand({
-			id: BOOKMARK_COMMAND_IDS.select,
-			name: names.select,
-			callback: () => {
-				const position = coordinator.getActivePosition();
-				if (!position) {
-					new Notice(t.noActiveView);
-					return;
-				}
-
-				const bookmarks = this.positionStore.listBookmarks(position.filePath);
-				if (bookmarks.length === 0) {
-					new Notice(t.noBookmarks);
-					return;
-				}
-
-				new BookmarkSuggestModal(this.app, bookmarks, bookmark => {
-					if (!coordinator.scrollActiveTo(position.filePath, bookmark.height)) {
-						new Notice(t.bookmarkStale);
-					}
-				}).open();
-			},
-		});
-
-		this.addCommand({
-			id: BOOKMARK_COMMAND_IDS.remove,
-			name: names.remove,
-			callback: () => this.openBookmarkDeleteModal(coordinator),
-		});
-	}
-
 	private registerStatusBarBookmarkActions(): void {
 		this.registerDomEvent(this.statusBarItemEl, 'click', () => {
-			if (!this.coordinator) return;
 			if (getStatusBarBookmarkAction({ type: 'click' }) !== STATUS_BAR_BOOKMARK_ACTIONS.save) return;
-			this.openBookmarkSaveModal(this.coordinator);
+			this.bookmarkCommands?.saveBookmark();
 		});
 		this.registerDomEvent(this.statusBarItemEl, 'contextmenu', event => {
 			event.preventDefault();
-			if (!this.coordinator) return;
 			if (getStatusBarBookmarkAction({ type: 'contextmenu' })
 				!== STATUS_BAR_BOOKMARK_ACTIONS.openList) return;
-			this.openBookmarkMenu(this.coordinator, event);
+			this.bookmarkCommands?.openBookmarkMenu(event);
 		});
 	}
 
@@ -235,112 +197,6 @@ export default class LastPositionPlugin extends Plugin {
 			placement: 'top',
 			delay: 300,
 		});
-	}
-
-	private openBookmarkSaveModal(coordinator: PositionCoordinator<unknown, unknown>): void {
-		const t = getTranslation();
-		const position = coordinator.getActivePosition();
-		if (!position) {
-			new Notice(t.noActiveView);
-			return;
-		}
-
-		new BookmarkNameModal(this.app, name => {
-			const bookmark = this.positionStore.saveBookmark(
-				position.filePath,
-				name,
-				position.height,
-			);
-			if (!bookmark) return;
-
-			void this.persistPositionState()
-				.then(() => {
-					new Notice(formatBookmarkSavedNotice(t.bookmarkSaved, bookmark));
-					this.flashStatusBar();
-				})
-				.catch(error => {
-					console.error('[Last-Position-Plugin]: Failed to save bookmark', error);
-					new Notice(t.bookmarkSaveFailed);
-				});
-		}).open();
-	}
-
-	private openBookmarkMenu(
-		coordinator: PositionCoordinator<unknown, unknown>,
-		event: MouseEvent,
-	): void {
-		const t = getTranslation();
-		const position = coordinator.getActivePosition();
-		if (!position) {
-			new Notice(t.noActiveView);
-			return;
-		}
-
-		const bookmarks = this.positionStore.listBookmarks(position.filePath);
-		if (bookmarks.length === 0) {
-			new Notice(t.noBookmarks);
-			return;
-		}
-
-		const menu = new Menu();
-		for (const bookmark of bookmarks) {
-			menu.addItem(item => item
-				.setTitle(`${bookmark.name} (${Math.round(bookmark.height)})`)
-				.onClick(() => {
-					if (!coordinator.scrollActiveTo(position.filePath, bookmark.height)) {
-						new Notice(t.bookmarkStale);
-					}
-				}));
-		}
-		menu.showAtMouseEvent(event);
-	}
-
-	private openBookmarkDeleteModal(coordinator: PositionCoordinator<unknown, unknown>): void {
-		const t = getTranslation();
-		const position = coordinator.getActivePosition();
-		if (!position) {
-			new Notice(t.noActiveView);
-			return;
-		}
-
-		const bookmarks = this.positionStore.listBookmarks(position.filePath);
-		if (bookmarks.length === 0) {
-			new Notice(t.noBookmarks);
-			return;
-		}
-
-		new BookmarkSuggestModal(this.app, bookmarks, bookmark => {
-			const message = t.bookmarkDeleteConfirmMessage
-				.replace('{name}', bookmark.name)
-				.replace('{height}', Math.round(bookmark.height).toString());
-			const confirmModal = new ConfirmModal(this.app, {
-				title: t.bookmarkDeleteConfirmTitle,
-				message,
-			});
-
-			void confirmModal.openAndAwait().then(async confirmed => {
-				if (!confirmed) return;
-				const current = coordinator.getActivePosition();
-				if (!current || current.filePath !== position.filePath) {
-					new Notice(t.bookmarkStale);
-					return;
-				}
-
-				if (!this.positionStore.deleteBookmark(position.filePath, bookmark)) {
-					new Notice(t.bookmarkStale);
-					return;
-				}
-
-				try {
-					await this.persistPositionState();
-					new Notice(t.bookmarkDeleted.replace('{name}', bookmark.name));
-					this.flashStatusBar();
-				} catch (error) {
-					console.error('[Last-Position-Plugin]: Failed to delete bookmark', error);
-					new Notice(t.bookmarkDeleteFailed);
-				}
-			});
-		}).open();
 	}
 
 	private handleInternalLinkClick(event: MouseEvent): void {
