@@ -196,10 +196,15 @@ export default class LastPositionPlugin extends Plugin {
 		const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
 		const sourcePath = activeView?.file?.path ?? '';
 		const linkPath = href.slice(0, hashIndex);
-		const targetFile: TFile | null = linkPath
-			? this.app.metadataCache.getFirstLinkpathDest(linkPath, sourcePath)
-			: activeView?.file ?? null;
-		if (targetFile) this.coordinator?.markAnchorNavigation(targetFile.path);
+		if (!linkPath) return;
+		const targetFile: TFile | null = this.app.metadataCache
+			.getFirstLinkpathDest(linkPath, sourcePath);
+		if (!targetFile || targetFile.path === sourcePath) return;
+		this.coordinator?.markAnchorNavigation({
+			linkText: href,
+			sourcePath,
+			targetFilePath: targetFile.path,
+		});
 	}
 
 	private updateStatusBar(height: number): void {

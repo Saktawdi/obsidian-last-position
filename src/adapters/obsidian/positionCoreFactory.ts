@@ -36,7 +36,7 @@ export function createObsidianPositionCore(
 	const anchorSuppression = new AnchorSuppression(
 		Math.max(1500, options.restoreDelayMs() + 500),
 	);
-	const resolveRestoreDelayMs = createRestoreDelayResolver<WorkspaceLeaf, MarkdownView>({
+	const resolveRestoreDelayMs = createRestoreDelayResolver({
 		isSmartEnabled: options.enableSmartRestoreDelay,
 		fixedDelayMs: options.restoreDelayMs,
 		readCharacterCount: async filePath => {
@@ -54,6 +54,11 @@ export function createObsidianPositionCore(
 		restoreIntervalMs: options.restoreIntervalMs,
 		debounceMs: options.debounceMs,
 		resolveRestoreDelayMs,
+		replayAnchorNavigation: request => options.app.workspace.openLinkText(
+			request.linkText,
+			request.sourcePath,
+			false,
+		),
 		persist: options.persist,
 		updateStatus: options.updateStatus,
 		onRestoreExpired: options.onRestoreExpired,

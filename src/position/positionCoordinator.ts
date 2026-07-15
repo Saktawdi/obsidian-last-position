@@ -1,5 +1,8 @@
 import { LeafRegistry, RegisteredLeaf, ScrollEventDetails } from '../obsidian/leafRegistry';
-import { AnchorSuppression } from './anchorSuppression';
+import {
+	AnchorSuppression,
+	type AnchorNavigationRequest,
+} from './anchorSuppression';
 import { PositionStore } from '../storage/positionStore';
 import { RestorationResult, RestorationScheduler } from './restorationScheduler';
 
@@ -17,9 +20,13 @@ export interface ActivePosition {
 	height: number;
 }
 
-export interface RestoreDelayContext<TLeaf, TView> {
-	source?: RegisteredLeaf<TLeaf, TView>;
-	target: RegisteredLeaf<TLeaf, TView>;
+export interface RestoreDelayDocument {
+	filePath: string;
+}
+
+export interface RestoreDelayContext {
+	source?: RestoreDelayDocument;
+	target: RestoreDelayDocument;
 }
 
 export interface PositionCoordinatorOptions<TLeaf, TView> {
@@ -31,8 +38,11 @@ export interface PositionCoordinatorOptions<TLeaf, TView> {
 	restoreIntervalMs?: () => number;
 	debounceMs: () => number;
 	resolveRestoreDelayMs: (
-		context: RestoreDelayContext<TLeaf, TView>,
+		context: RestoreDelayContext,
 	) => number | Promise<number>;
+	replayAnchorNavigation: (
+		request: AnchorNavigationRequest,
+	) => void | Promise<void>;
 	now?: () => number;
 	persist: () => Promise<void>;
 	updateStatus: (height: number) => void;
@@ -60,6 +70,12 @@ interface ProgrammaticJump<TLeaf, TView> {
 	timer: TimerHandle;
 }
 
+interface PendingAnchorReplay<TLeaf, TView> {
+	record: RegisteredLeaf<TLeaf, TView>;
+	request: AnchorNavigationRequest;
+	timer?: TimerHandle;
+}
+
 export class PositionCoordinator<TLeaf, TView> {
 	private activeRecord?: RegisteredLeaf<TLeaf, TView>;
 	private readonly pendingSaves = new Map<string, PendingSave<TLeaf, TView>>();
@@ -68,6 +84,7 @@ export class PositionCoordinator<TLeaf, TView> {
 	private readonly restoring = new Set<string>();
 	private readonly modeHandoffs = new Map<string, ModeHandoff>();
 	private readonly programmaticJumps = new Map<string, ProgrammaticJump<TLeaf, TView>>();
+	private readonly pendingAnchorReplays = new Map<string, PendingAnchorReplay<TLeaf, TView>>();
 	private persistQueue: Promise<void> = Promise.resolve();
 	private disposed = false;
 
@@ -127,6 +144,7 @@ export class PositionCoordinator<TLeaf, TView> {
 		}
 
 		const previousRecord = this.activeRecord;
+		if (previousRecord) this.cancelAnchorReplay(previousRecord.leafId);
 		if (previousRecord) this.flushPendingSave(previousRecord.leafId);
 		this.reconcileLeaves();
 		this.activeRecord = this.options.registry.describe(leaf);
@@ -147,6 +165,7 @@ export class PositionCoordinator<TLeaf, TView> {
 			return;
 		}
 		const previousRecord = this.activeRecord;
+		if (previousRecord) this.cancelAnchorReplay(previousRecord.leafId);
 		if (previousRecord) {
 			this.flushPendingSave(previousRecord.leafId);
 		}
@@ -157,8 +176,9 @@ export class PositionCoordinator<TLeaf, TView> {
 		this.scheduleRestore(record, true, source);
 	}
 
-	markAnchorNavigation(filePath: string): void {
-		this.options.anchorSuppression.mark(filePath);
+	markAnchorNavigation(request: AnchorNavigationRequest): void {
+		this.cancelAllAnchorReplays();
+		this.options.anchorSuppression.mark(request);
 	}
 
 	async dispose(): Promise<void> {
@@ -171,6 +191,7 @@ export class PositionCoordinator<TLeaf, TView> {
 		this.modeHandoffs.clear();
 		for (const jump of this.programmaticJumps.values()) globalThis.clearTimeout(jump.timer);
 		this.programmaticJumps.clear();
+		this.cancelAllAnchorReplays();
 
 		for (const pending of this.pendingSaves.values()) {
 			globalThis.clearTimeout(pending.timer);
@@ -188,7 +209,10 @@ export class PositionCoordinator<TLeaf, TView> {
 	): void {
 		if (this.disposed) return;
 		if (this.consumeProgrammaticJump(record, details)) return;
-		if (details.userInitiated) this.modeHandoffs.delete(record.leafId);
+		if (details.userInitiated) {
+			this.modeHandoffs.delete(record.leafId);
+			this.cancelAnchorReplay(record.leafId);
+		}
 		if (this.restoring.has(record.leafId)) {
 			if (!details.userInitiated) return;
 			this.cancelRestore(record.leafId);
@@ -291,7 +315,13 @@ export class PositionCoordinator<TLeaf, TView> {
 	): void {
 		this.cancelRestore(record.leafId);
 		this.modeHandoffs.delete(record.leafId);
-		if (consumeSuppression && this.options.anchorSuppression.consume(record.filePath)) return;
+		const anchorRequest = consumeSuppression
+			? this.options.anchorSuppression.consume(record.filePath)
+			: undefined;
+		if (anchorRequest) {
+			this.scheduleAnchorReplay(record, anchorRequest);
+			return;
+		}
 
 		const saved = this.options.store.resolve(record.leafId, record.filePath);
 		if (!saved) return;
@@ -319,6 +349,64 @@ export class PositionCoordinator<TLeaf, TView> {
 				const timer = globalThis.setTimeout(startRestore, remainingDelayMs);
 				this.restoreTimers.set(record.leafId, timer);
 			});
+	}
+
+	private scheduleAnchorReplay(
+		record: RegisteredLeaf<TLeaf, TView>,
+		request: AnchorNavigationRequest,
+	): void {
+		const pending: PendingAnchorReplay<TLeaf, TView> = { record, request };
+		this.pendingAnchorReplays.set(record.leafId, pending);
+		const requestedAt = this.options.now?.() ?? Date.now();
+
+		void Promise.resolve()
+			.then(() => this.options.resolveRestoreDelayMs({
+				source: { filePath: request.sourcePath },
+				target: record,
+			}))
+			.catch(() => 0)
+			.then(delayMs => {
+				if (!this.isAnchorReplayCurrent(pending)) return;
+
+				const selectedDelayMs = Number.isFinite(delayMs) ? Math.max(0, delayMs) : 0;
+				const elapsedMs = (this.options.now?.() ?? Date.now()) - requestedAt;
+				const remainingDelayMs = Math.max(0, selectedDelayMs - elapsedMs);
+				if (remainingDelayMs <= 0) {
+					this.dispatchAnchorReplay(pending);
+					return;
+				}
+
+				pending.timer = globalThis.setTimeout(() => {
+					this.dispatchAnchorReplay(pending);
+				}, remainingDelayMs);
+			});
+	}
+
+	private dispatchAnchorReplay(pending: PendingAnchorReplay<TLeaf, TView>): void {
+		if (!this.isAnchorReplayCurrent(pending)) return;
+		this.pendingAnchorReplays.delete(pending.record.leafId);
+		void Promise.resolve()
+			.then(() => this.options.replayAnchorNavigation(pending.request))
+			.catch(() => undefined);
+	}
+
+	private isAnchorReplayCurrent(pending: PendingAnchorReplay<TLeaf, TView>): boolean {
+		return this.pendingAnchorReplays.get(pending.record.leafId) === pending
+			&& this.options.registry.isCurrent(pending.record)
+			&& this.documentsMatch(this.activeRecord, pending.record);
+	}
+
+	private cancelAnchorReplay(leafId: string): void {
+		const pending = this.pendingAnchorReplays.get(leafId);
+		if (!pending) return;
+		if (pending.timer !== undefined) globalThis.clearTimeout(pending.timer);
+		this.pendingAnchorReplays.delete(leafId);
+	}
+
+	private cancelAllAnchorReplays(): void {
+		for (const leafId of this.pendingAnchorReplays.keys()) {
+			this.cancelAnchorReplay(leafId);
+		}
 	}
 
 	private startRestore(
@@ -382,6 +470,7 @@ export class PositionCoordinator<TLeaf, TView> {
 		if (timer !== undefined) globalThis.clearTimeout(timer);
 		this.restoreTimers.delete(leafId);
 		this.clearProgrammaticJump(leafId);
+		this.cancelAnchorReplay(leafId);
 		this.options.scheduler.cancel(leafId);
 		this.restorationRuns.set(leafId, (this.restorationRuns.get(leafId) ?? 0) + 1);
 		this.restoring.delete(leafId);

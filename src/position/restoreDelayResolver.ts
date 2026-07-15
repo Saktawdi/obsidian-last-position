@@ -7,9 +7,9 @@ export interface RestoreDelayResolverOptions {
 	readCharacterCount: (filePath: string) => Promise<number>;
 }
 
-export function createRestoreDelayResolver<TLeaf, TView>(
+export function createRestoreDelayResolver(
 	options: RestoreDelayResolverOptions,
-): (context: RestoreDelayContext<TLeaf, TView>) => number | Promise<number> {
+): (context: RestoreDelayContext) => number | Promise<number> {
 	return context => {
 		if (!options.isSmartEnabled()) {
 			const fixedDelay = options.fixedDelayMs();

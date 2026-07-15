@@ -6,7 +6,10 @@ import {
 	type RegisteredLeaf,
 	type ScrollEventDetails,
 } from '../../src/obsidian/leafRegistry';
-import { AnchorSuppression } from '../../src/position/anchorSuppression';
+import {
+	AnchorSuppression,
+	type AnchorNavigationRequest,
+} from '../../src/position/anchorSuppression';
 import {
 	PositionCoordinator,
 	type RestoreDelayContext,
@@ -113,7 +116,7 @@ function nextTurn(): Promise<void> {
 
 interface CoordinatorOverrides {
 	resolveRestoreDelayMs?: (
-		context: RestoreDelayContext<FakeLeaf, FakeView>,
+		context: RestoreDelayContext,
 	) => number | Promise<number>;
 	now?: () => number;
 }
@@ -126,6 +129,7 @@ function createCoordinator(
 ) {
 	let persists = 0;
 	const statusHeights: number[] = [];
+	const anchorReplays: AnchorNavigationRequest[] = [];
 	const coordinator = new PositionCoordinator({
 		registry: new LeafRegistry(source),
 		store,
@@ -141,11 +145,15 @@ function createCoordinator(
 		},
 		updateStatus: height => statusHeights.push(height),
 		onRestoreExpired: () => {},
+		replayAnchorNavigation: request => {
+			anchorReplays.push({ ...request });
+		},
 	});
 	return {
 		coordinator,
 		getPersists: () => persists,
 		getStatusHeights: () => [...statusHeights],
+		getAnchorReplays: () => [...anchorReplays],
 	};
 }
 
@@ -251,23 +259,152 @@ test('saves the previous leaf and restores the newly active leaf', async () => {
 	await coordinator.dispose();
 });
 
-test('anchor suppression skips the current navigation but restores on a later reopening', async () => {
+test('cross-file anchor navigation replays once after the restore delay without applying history', async () => {
 	const source = new CoordinatorLeafSource();
 	const store = new PositionStore();
-	store.save('leaf-b', 'b.md', 20, 1);
-	const { coordinator } = createCoordinator(source, store);
+	store.save('leaf-a', 'b.md', 20, 1);
+	const before = store.snapshot();
+	const delayContexts: Array<[string | undefined, string]> = [];
+	const { coordinator, getAnchorReplays, getPersists } = createCoordinator(source, store, 20, {
+		resolveRestoreDelayMs: context => {
+			delayContexts.push([context.source?.filePath, context.target.filePath]);
+			return 20;
+		},
+	});
+	const request = {
+		linkText: 'b#^block-id',
+		sourcePath: 'a.md',
+		targetFilePath: 'b.md',
+	};
 
-	coordinator.markAnchorNavigation('b.md');
-	coordinator.start(source.leaves[1].leaf);
+	coordinator.start(source.leaves[0].leaf);
+	coordinator.markAnchorNavigation(request);
+	source.openFile('leaf-a', 'b.md');
+	coordinator.handleFileOpen(source.leaves[0].leaf);
 	await nextTurn();
-	assert.equal(source.leaves[1].view.scroll, 0);
+	assert.deepEqual(getAnchorReplays(), []);
+	assert.deepEqual(source.appliedHeights, []);
 
-	source.scroll('leaf-b', 25, true);
-	coordinator.handleActiveLeafChange(source.leaves[0].leaf);
-	await nextTurn();
+	await new Promise(resolve => setTimeout(resolve, 25));
+	assert.deepEqual(getAnchorReplays(), [request]);
+	assert.deepEqual(delayContexts, [['a.md', 'b.md']]);
+	assert.deepEqual(source.appliedHeights, []);
+	assert.deepEqual(store.snapshot(), before);
+	assert.equal(getPersists(), 0);
+
+	source.openFile('leaf-a', 'a.md');
+	coordinator.handleFileOpen(source.leaves[0].leaf);
+	source.openFile('leaf-a', 'b.md');
+	coordinator.handleFileOpen(source.leaves[0].leaf);
+	await new Promise(resolve => setTimeout(resolve, 25));
+	assert.deepEqual(source.appliedHeights, [20]);
+	await coordinator.dispose();
+});
+
+test('user scrolling cancels a pending cross-file anchor replay', async () => {
+	const source = new CoordinatorLeafSource();
+	const store = new PositionStore();
+	const { coordinator, getAnchorReplays } = createCoordinator(source, store, 20);
+
+	coordinator.start(source.leaves[0].leaf);
+	coordinator.markAnchorNavigation({
+		linkText: 'b#Section',
+		sourcePath: 'a.md',
+		targetFilePath: 'b.md',
+	});
+	source.openFile('leaf-a', 'b.md');
+	coordinator.handleFileOpen(source.leaves[0].leaf);
+	source.scroll('leaf-a', 5, true);
+	await new Promise(resolve => setTimeout(resolve, 30));
+
+	assert.deepEqual(getAnchorReplays(), []);
+	await coordinator.dispose();
+});
+
+test('opening another file cancels a stale cross-file anchor replay', async () => {
+	const source = new CoordinatorLeafSource();
+	const store = new PositionStore();
+	const { coordinator, getAnchorReplays } = createCoordinator(source, store, 20);
+
+	coordinator.start(source.leaves[0].leaf);
+	coordinator.markAnchorNavigation({
+		linkText: 'b#Section',
+		sourcePath: 'a.md',
+		targetFilePath: 'b.md',
+	});
+	source.openFile('leaf-a', 'b.md');
+	coordinator.handleFileOpen(source.leaves[0].leaf);
+	source.openFile('leaf-a', 'c.md');
+	coordinator.handleFileOpen(source.leaves[0].leaf);
+	await new Promise(resolve => setTimeout(resolve, 30));
+
+	assert.deepEqual(getAnchorReplays(), []);
+	await coordinator.dispose();
+});
+
+test('switching the active leaf cancels a pending cross-file anchor replay', async () => {
+	const source = new CoordinatorLeafSource();
+	const store = new PositionStore();
+	const { coordinator, getAnchorReplays } = createCoordinator(source, store, 20);
+
+	coordinator.start(source.leaves[0].leaf);
+	coordinator.markAnchorNavigation({
+		linkText: 'b#Section',
+		sourcePath: 'a.md',
+		targetFilePath: 'b.md',
+	});
+	source.openFile('leaf-a', 'b.md');
+	coordinator.handleFileOpen(source.leaves[0].leaf);
 	coordinator.handleActiveLeafChange(source.leaves[1].leaf);
-	await nextTurn();
-	assert.equal(source.leaves[1].view.scroll, 25);
+	await new Promise(resolve => setTimeout(resolve, 30));
+
+	assert.deepEqual(getAnchorReplays(), []);
+	await coordinator.dispose();
+});
+
+test('disposing cancels a pending cross-file anchor replay', async () => {
+	const source = new CoordinatorLeafSource();
+	const store = new PositionStore();
+	const { coordinator, getAnchorReplays } = createCoordinator(source, store, 20);
+
+	coordinator.start(source.leaves[0].leaf);
+	coordinator.markAnchorNavigation({
+		linkText: 'b#Section',
+		sourcePath: 'a.md',
+		targetFilePath: 'b.md',
+	});
+	source.openFile('leaf-a', 'b.md');
+	coordinator.handleFileOpen(source.leaves[0].leaf);
+	await coordinator.dispose();
+	await new Promise(resolve => setTimeout(resolve, 30));
+
+	assert.deepEqual(getAnchorReplays(), []);
+});
+
+test('a newer cross-file anchor request cancels an older pending replay', async () => {
+	const source = new CoordinatorLeafSource();
+	const store = new PositionStore();
+	const { coordinator, getAnchorReplays } = createCoordinator(source, store, 20);
+	const latest = {
+		linkText: 'c#Latest',
+		sourcePath: 'b.md',
+		targetFilePath: 'c.md',
+	};
+
+	coordinator.start(source.leaves[0].leaf);
+	coordinator.markAnchorNavigation({
+		linkText: 'b#Old',
+		sourcePath: 'a.md',
+		targetFilePath: 'b.md',
+	});
+	source.openFile('leaf-a', 'b.md');
+	coordinator.handleFileOpen(source.leaves[0].leaf);
+	coordinator.markAnchorNavigation(latest);
+	source.openFile('leaf-a', 'c.md');
+	coordinator.handleFileOpen(source.leaves[0].leaf);
+	await new Promise(resolve => setTimeout(resolve, 30));
+
+	assert.deepEqual(getAnchorReplays(), [latest]);
 	await coordinator.dispose();
 });
 
@@ -333,7 +470,11 @@ test('startup does not restore background leaves or override active anchor navig
 	store.save('leaf-b', 'b.md', 20, 1);
 	const { coordinator } = createCoordinator(source, store);
 
-	coordinator.markAnchorNavigation('b.md');
+	coordinator.markAnchorNavigation({
+		linkText: 'b#Section',
+		sourcePath: 'a.md',
+		targetFilePath: 'b.md',
+	});
 	coordinator.start(source.leaves[1].leaf);
 	await nextTurn();
 

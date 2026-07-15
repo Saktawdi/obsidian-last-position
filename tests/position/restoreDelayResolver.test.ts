@@ -15,7 +15,7 @@ function record(filePath: string): RegisteredLeaf<object, object> {
 
 test('uses the fixed delay without reading files when smart delay is disabled', async () => {
 	let reads = 0;
-	const resolveDelay = createRestoreDelayResolver<object, object>({
+	const resolveDelay = createRestoreDelayResolver({
 		isSmartEnabled: () => false,
 		fixedDelayMs: () => 450,
 		readCharacterCount: async () => {
@@ -31,7 +31,7 @@ test('uses the fixed delay without reading files when smart delay is disabled', 
 test('reads source and target concurrently and ignores the fixed delay in smart mode', async () => {
 	const requested: string[] = [];
 	const pending = new Map<string, (count: number) => void>();
-	const resolveDelay = createRestoreDelayResolver<object, object>({
+	const resolveDelay = createRestoreDelayResolver({
 		isSmartEnabled: () => true,
 		fixedDelayMs: () => 9999,
 		readCharacterCount: filePath => new Promise(resolve => {
@@ -52,7 +52,7 @@ test('reads source and target concurrently and ignores the fixed delay in smart 
 });
 
 test('treats a failed character count as zero in smart mode', async () => {
-	const resolveDelay = createRestoreDelayResolver<object, object>({
+	const resolveDelay = createRestoreDelayResolver({
 		isSmartEnabled: () => true,
 		fixedDelayMs: () => 9999,
 		readCharacterCount: async filePath => {
