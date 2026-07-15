@@ -23,3 +23,8 @@ data.json
 
 # Local Git worktrees
 .worktrees/
+
+# Local planning and work documents
+/docs/
+/todo.md
+/归档/
