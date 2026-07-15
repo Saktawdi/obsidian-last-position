@@ -455,10 +455,10 @@ Run:
 ~~~powershell
 git status --short
 git diff --check HEAD~3..HEAD
-git log -4 --oneline
+git log -5 --oneline
 ~~~
 
-Expected: No unintended changes to todo.md, existing untracked plans, or 归档; the three implementation commits follow the design commit.
+Expected: No unintended changes to todo.md, existing untracked plans, or 归档; the three implementation commits follow the plan and design commits.
 
 - [ ] **Step 4: Deliver GitHub Release notes**
 
