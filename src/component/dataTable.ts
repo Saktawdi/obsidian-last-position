@@ -22,9 +22,9 @@ export class DataTable {
     private containerEl: HTMLElement;
     private context: DataTableContext;
     private onDataChanged: () => void;
-    private currentPage: number = 1;
-    private static lastPage: number = 1; // 静态变量保存上次页码
-    private static sortField: string = 'lastAccessed'; // 默认排序字段
+    private currentPage = 1;
+    private static lastPage = 1; // 静态变量保存上次页码
+    private static sortField = 'lastAccessed'; // 默认排序字段
     private static sortDirection: 'asc' | 'desc' = 'desc'; // 默认降序排列（最新的在前）
 
 
@@ -189,17 +189,19 @@ export class DataTable {
                 case 'fileName':
                     result = a[0].localeCompare(b[0]);
                     break;
-                case 'height':
+                case 'height': {
                     const heightA = a[1].height || 0;
                     const heightB = b[1].height || 0;
                     result = heightA - heightB;
                     break;
+                }
                 case 'lastAccessed':
-                default:
+                default: {
                     const timeA = a[1].lastAccessed || 0;
                     const timeB = b[1].lastAccessed || 0;
                     result = timeA - timeB;
                     break;
+                }
             }
             // 如果是降序，反转结果
             return this.sortDirection === 'asc' ? result : -result;

@@ -1,11 +1,9 @@
-import { App, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
 import type { TextComponent } from 'obsidian';
 import { getTranslation } from '.language/translations';
 import { DataTable, DataTableContext } from '../component/dataTable';
 import { DataExportImportUtil } from '../utils/dataExportImportUtil';
-import type { PositionStore } from '../storage/positionStore';
 import type { PositionState } from '../domain/positionTypes';
-import type { LastPositionSettings } from './settingsModel';
 
 export interface SettingsTabContext extends DataTableContext {
 	plugin: Plugin;
@@ -67,7 +65,6 @@ export class AutoSaveScrollSettingsTab extends PluginSettingTab {
 			.setName(t.positionRestoreSettings)
 			.setHeading();
 
-		let fixedDelaySetting: Setting | undefined;
 		let fixedDelayInput: TextComponent | undefined;
 
 		new Setting(containerEl)
@@ -78,12 +75,12 @@ export class AutoSaveScrollSettingsTab extends PluginSettingTab {
 				.onChange(async value => {
 					this.context.settings.enableSmartRestoreDelay = value;
 					await this.context.saveSettings();
-					fixedDelaySetting?.settingEl.classList.toggle('is-hidden', value);
+					fixedDelaySetting.settingEl.classList.toggle('is-hidden', value);
 					fixedDelayInput?.setDisabled(value);
 					new Notice(t.changeSuccess);
 				}));
 
-		fixedDelaySetting = new Setting(containerEl)
+		const fixedDelaySetting = new Setting(containerEl)
 			.setName(t.restoreDelay)
 			.setDesc(t.restoreDelayDesc)
 			.addText(text => {

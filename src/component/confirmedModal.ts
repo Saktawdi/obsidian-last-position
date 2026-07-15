@@ -8,7 +8,7 @@ function getTranslation(): Translation {
 }
 
 export class ConfirmModal extends Modal {
-    private result: boolean = false;
+    private result = false;
     private resolvePromise: (value: boolean) => void;
     private title: string;
     private message: string;
