@@ -1,13 +1,13 @@
 import { MarkdownView, Notice, Plugin, TFile } from 'obsidian';
 import { TRANSLATIONS, getLanguage, getTranslation } from '.language/translations';
-import { PositionCoordinator } from './position/positionCoordinator';
+import { PositionCoordinator } from './core/positionCoordinator';
 import { PositionStore, migratePositionState } from './storage/positionStore';
 import type { PositionState } from './domain/positionTypes';
 import { PositionPersistenceService } from './storage/positionPersistence';
 import {
 	createObsidianPositionCore,
 	ObsidianPositionCore,
-} from './adapters/obsidian/positionCoreFactory';
+} from './core/obsidianPositionCore';
 import { BookmarkCommandController } from './commands/bookmarkCommands';
 import { CommonCommandController } from './commands/commonCommands';
 import { CommandRegistry } from './commands/commandRegistry';

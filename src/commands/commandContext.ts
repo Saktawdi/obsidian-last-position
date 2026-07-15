@@ -1,5 +1,5 @@
 import { App } from 'obsidian';
-import { PositionCoordinator } from '../position/positionCoordinator';
+import { PositionCoordinator } from '../core/positionCoordinator';
 import { PositionStore } from '../storage/positionStore';
 
 export interface CommandContext {

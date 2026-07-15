@@ -1,4 +1,4 @@
-import { LeafRegistry, RegisteredLeaf, ScrollEventDetails } from '../obsidian/leafRegistry';
+import { LeafRegistry, RegisteredLeaf, ScrollEventDetails } from './leafRegistry';
 import {
 	AnchorSuppression,
 	type AnchorNavigationRequest,

@@ -1,12 +1,12 @@
 import { App, MarkdownView, TFile, WorkspaceLeaf } from 'obsidian';
-import { AnchorSuppression } from '../../position/anchorSuppression';
-import { LeafRegistry } from '../../obsidian/leafRegistry';
-import { ObsidianLeafSource } from '../../obsidian/obsidianLeafSource';
-import { PositionCoordinator, RestoreExpiryDetails } from '../../position/positionCoordinator';
-import { RestorationScheduler } from '../../position/restorationScheduler';
-import { PositionStore } from '../../storage/positionStore';
-import { PositionCore } from '../../core/positionCore';
-import { createRestoreDelayResolver } from '../../position/restoreDelayResolver';
+import { AnchorSuppression } from './anchorSuppression';
+import { LeafRegistry } from './leafRegistry';
+import { ObsidianLeafSource } from './obsidianLeafSource';
+import { PositionCoordinator, RestoreExpiryDetails } from './positionCoordinator';
+import { RestorationScheduler } from './restorationScheduler';
+import { PositionStore } from '../storage/positionStore';
+import { PositionCore } from './positionCore';
+import { createRestoreDelayResolver } from './restoreDelayResolver';
 
 export interface ObsidianPositionCoreOptions {
 	app: App;

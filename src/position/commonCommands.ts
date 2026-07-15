@@ -1,5 +1,5 @@
 import type { PositionStore } from '../storage/positionStore';
-import type { ActivePosition } from './positionCoordinator';
+import type { ActivePosition } from '../core/positionCoordinator';
 
 export const COMMON_COMMAND_IDS = {
 	toLastPosition: 'last-position-to-last-position',
