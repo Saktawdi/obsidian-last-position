@@ -91,7 +91,7 @@ export class PositionCoordinator<TLeaf, TView> {
 	constructor(private readonly options: PositionCoordinatorOptions<TLeaf, TView>) {}
 
 	start(activeLeaf: TLeaf | null): void {
-		this.reconcileLeaves();
+		this.reconcileViewChanges();
 		this.handleActiveLeafChange(activeLeaf);
 	}
 
@@ -128,10 +128,18 @@ export class PositionCoordinator<TLeaf, TView> {
 	}
 
 	reconcile(): void {
+		this.reconcileViewChanges();
+	}
+
+	private reconcileViewChanges(): void {
 		const result = this.reconcileLeaves();
 		for (const leafId of result.removedLeafIds) {
 			this.cancelRestore(leafId);
 			this.modeHandoffs.delete(leafId);
+		}
+
+		for (const transition of result.reboundTransitions) {
+			this.handleReconciledViewChange(transition.previous, transition.current);
 		}
 	}
 
@@ -146,7 +154,7 @@ export class PositionCoordinator<TLeaf, TView> {
 		const previousRecord = this.activeRecord;
 		if (previousRecord) this.cancelAnchorReplay(previousRecord.leafId);
 		if (previousRecord) this.flushPendingSave(previousRecord.leafId);
-		this.reconcileLeaves();
+		this.reconcileViewChanges();
 		this.activeRecord = this.options.registry.describe(leaf);
 		if (this.activeRecord) {
 			const source = previousRecord?.leafId === this.activeRecord.leafId
@@ -157,7 +165,7 @@ export class PositionCoordinator<TLeaf, TView> {
 	}
 
 	handleFileOpen(leaf: TLeaf | null): void {
-		this.reconcileLeaves();
+		this.reconcileViewChanges();
 		const record = this.options.registry.describe(leaf);
 		if (!record) return;
 		if (this.documentsMatch(this.activeRecord, record)) {
@@ -465,6 +473,71 @@ export class PositionCoordinator<TLeaf, TView> {
 		});
 	}
 
+	private startModeHandoffRestore(
+		record: RegisteredLeaf<TLeaf, TView>,
+		targetHeight: number,
+		handoff: ModeHandoff,
+	): void {
+		this.cancelRestore(record.leafId);
+		const run = (this.restorationRuns.get(record.leafId) ?? 0) + 1;
+		this.restorationRuns.set(record.leafId, run);
+		this.restoring.add(record.leafId);
+
+		void this.options.scheduler.start(record.leafId, targetHeight, {
+			isCurrent: () => this.options.registry.isCurrent(record),
+			readScroll: () => this.options.registry.readScroll(record),
+			applyScroll: height => this.options.registry.applyScroll(record, height),
+		}, {
+			maxAttempts: this.options.maxAttempts(),
+			intervalMs: this.options.restoreIntervalMs?.() ?? 100,
+		}).then(result => this.handleModeHandoffResult(
+			record,
+			targetHeight,
+			handoff,
+			result,
+			run,
+		))
+			.finally(() => {
+				if (this.restorationRuns.get(record.leafId) === run) {
+					this.restoring.delete(record.leafId);
+				}
+			});
+	}
+
+	private handleModeHandoffResult(
+		record: RegisteredLeaf<TLeaf, TView>,
+		targetHeight: number,
+		handoff: ModeHandoff,
+		result: RestorationResult,
+		run: number,
+	): void {
+		if (this.disposed || this.restorationRuns.get(record.leafId) !== run) return;
+		if (this.modeHandoffs.get(record.leafId) === handoff) {
+			this.modeHandoffs.delete(record.leafId);
+		}
+		if (result.reason === 'completed') {
+			const restoredHeight = result.actualHeight !== undefined
+				&& Number.isFinite(result.actualHeight)
+				? result.actualHeight
+				: targetHeight;
+			if (this.options.registry.isCurrent(record)
+				&& this.documentsMatch(this.activeRecord, record)) {
+				this.options.updateStatus(restoredHeight);
+			}
+			return;
+		}
+		if (result.reason !== 'expired') return;
+		if (!this.options.registry.isCurrent(record)
+			|| !this.documentsMatch(this.activeRecord, record)) return;
+		this.options.onRestoreExpired({
+			leafId: record.leafId,
+			filePath: record.filePath,
+			targetHeight,
+			actualHeight: result.actualHeight,
+			attempts: result.attempts,
+		});
+	}
+
 	private cancelRestore(leafId: string): void {
 		const timer = this.restoreTimers.get(leafId);
 		if (timer !== undefined) globalThis.clearTimeout(timer);
@@ -479,16 +552,26 @@ export class PositionCoordinator<TLeaf, TView> {
 	private reconcileLeaves() {
 		return this.options.registry.reconcile(
 			(record, details) => this.handleScroll(record, details),
-			record => this.handleViewChange(record),
+			() => this.handleViewChange(),
 		);
 	}
 
-	private handleViewChange(record: RegisteredLeaf<TLeaf, TView>): void {
-		this.cancelRestore(record.leafId);
-		this.reconcile();
-		const current = this.options.registry.describe(record.leaf);
-		this.applyModeHandoff(record, current);
-		if (this.documentsMatch(this.activeRecord, current)) {
+	private handleViewChange(): void {
+		this.reconcileViewChanges();
+	}
+
+	private handleReconciledViewChange(
+		previous: RegisteredLeaf<TLeaf, TView>,
+		current: RegisteredLeaf<TLeaf, TView>,
+	): void {
+		if (previous.filePath !== current.filePath) {
+			this.cancelRestore(previous.leafId);
+			this.modeHandoffs.delete(previous.leafId);
+			return;
+		}
+
+		this.applyModeHandoff(previous, current);
+		if (this.documentsMatch(this.activeRecord, previous)) {
 			this.activeRecord = current;
 		}
 	}
@@ -504,19 +587,24 @@ export class PositionCoordinator<TLeaf, TView> {
 		const handoff = this.modeHandoffs.get(current.leafId);
 		if (!handoff
 			|| handoff.filePath !== current.filePath
-			|| handoff.sourceViewKey !== previous.viewKey) return;
-
-		const currentHeight = this.options.registry.readScroll(current);
-		if (currentHeight === undefined || !Number.isFinite(currentHeight)) return;
-		this.modeHandoffs.delete(current.leafId);
-		if (Math.abs(currentHeight) <= 1) {
-			this.options.registry.applyScroll(current, handoff.height);
-			const appliedHeight = this.options.registry.readScroll(current);
-			this.options.updateStatus(appliedHeight ?? handoff.height);
+			|| handoff.sourceViewKey !== previous.viewKey) {
+			this.cancelRestore(current.leafId);
 			return;
 		}
 
-		this.options.updateStatus(currentHeight);
+		const currentHeight = this.options.registry.readScroll(current);
+		const targetHeight = currentHeight !== undefined
+			&& Number.isFinite(currentHeight)
+			&& currentHeight > 1
+			? currentHeight
+			: handoff.height;
+		const nextHandoff: ModeHandoff = {
+			filePath: current.filePath,
+			sourceViewKey: current.viewKey,
+			height: targetHeight,
+		};
+		this.modeHandoffs.set(current.leafId, nextHandoff);
+		this.startModeHandoffRestore(current, targetHeight, nextHandoff);
 	}
 
 	private documentsMatch(

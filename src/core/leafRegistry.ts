@@ -34,6 +34,10 @@ interface LeafBinding<TLeaf, TView> {
 export interface ReconcileResult<TLeaf, TView> {
 	records: RegisteredLeaf<TLeaf, TView>[];
 	addedOrRebound: RegisteredLeaf<TLeaf, TView>[];
+	reboundTransitions: Array<{
+		previous: RegisteredLeaf<TLeaf, TView>;
+		current: RegisteredLeaf<TLeaf, TView>;
+	}>;
 	removedLeafIds: string[];
 }
 
@@ -69,6 +73,7 @@ export class LeafRegistry<TLeaf = unknown, TView = unknown> {
 		const records = this.source.all();
 		const activeLeafIds = new Set(records.map(record => record.leafId));
 		const addedOrRebound: RegisteredLeaf<TLeaf, TView>[] = [];
+		const reboundTransitions: ReconcileResult<TLeaf, TView>['reboundTransitions'] = [];
 		const removedLeafIds: string[] = [];
 
 		for (const record of records) {
@@ -80,7 +85,10 @@ export class LeafRegistry<TLeaf = unknown, TView = unknown> {
 				continue;
 			}
 
-			existing?.unbind();
+			if (existing) {
+				reboundTransitions.push({ previous: existing.record, current: record });
+				existing.unbind();
+			}
 			const binding: LeafBinding<TLeaf, TView> = {
 				record,
 				filePath: record.filePath,
@@ -111,7 +119,7 @@ export class LeafRegistry<TLeaf = unknown, TView = unknown> {
 			removedLeafIds.push(leafId);
 		}
 
-		return { records, addedOrRebound, removedLeafIds };
+		return { records, addedOrRebound, reboundTransitions, removedLeafIds };
 	}
 
 	dispose(): void {
