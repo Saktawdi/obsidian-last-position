@@ -1,4 +1,4 @@
-import { SerializedTaskQueue } from '../position/serializedTaskQueue';
+import { SerializedTaskQueue } from './serializedTaskQueue';
 import type { PositionState } from '../domain/positionTypes';
 import { PositionStore } from './positionStore';
 

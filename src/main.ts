@@ -12,7 +12,7 @@ import { BookmarkCommandController } from './commands/bookmarkCommandController'
 import { CommonCommandController } from './commands/commonCommandController';
 import { CommandRegistry } from './commands/commandRegistry';
 import { StatusBarController } from './ui/statusBarController';
-import { ParsedSettingsData, parseSettingsData } from './position/settingsData';
+import { ParsedSettingsData, parseSettingsData } from './settings/settingsData';
 import { AutoSaveScrollSettingsTab } from './settings/settingsTab';
 import { DEFAULT_SETTINGS } from './settings/settingsModel';
 import type { LastPositionSettings } from './settings/settingsModel';
