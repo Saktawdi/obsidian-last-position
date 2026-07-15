@@ -1,5 +1,7 @@
+import { EditorView } from '@codemirror/view';
 import { MarkdownView, Notice, Plugin, TFile } from 'obsidian';
 import { TRANSLATIONS, getLanguage, getTranslation } from '.language/translations';
+import { resolveEditorLinkNavigation } from './core/editorLinkNavigation';
 import { PositionCoordinator } from './core/positionCoordinator';
 import { PositionStore, migratePositionState } from './storage/positionStore';
 import type { PositionState } from './domain/positionTypes';
@@ -31,6 +33,15 @@ export default class LastPositionPlugin extends Plugin {
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
+		this.registerEditorExtension(EditorView.domEventHandlers({
+			click: (event, view) => {
+				const navigation = resolveEditorLinkNavigation(event, view);
+				if (navigation) {
+					this.markCrossFileAnchor(navigation.linkText, navigation.sourcePath);
+				}
+				return false;
+			},
+		}));
 
 		const lang = getLanguage();
 		if (!TRANSLATIONS[lang]) {
@@ -190,18 +201,22 @@ export default class LastPositionPlugin extends Plugin {
 		const href = link?.getAttribute('data-href');
 		if (!href) return;
 
-		const hashIndex = href.indexOf('#');
-		if (hashIndex < 0 || hashIndex === href.length - 1) return;
-
 		const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
 		const sourcePath = activeView?.file?.path ?? '';
-		const linkPath = href.slice(0, hashIndex);
+		this.markCrossFileAnchor(href, sourcePath);
+	}
+
+	private markCrossFileAnchor(linkText: string, sourcePath: string): void {
+		const hashIndex = linkText.indexOf('#');
+		if (hashIndex < 0 || hashIndex === linkText.length - 1) return;
+
+		const linkPath = linkText.slice(0, hashIndex);
 		if (!linkPath) return;
 		const targetFile: TFile | null = this.app.metadataCache
 			.getFirstLinkpathDest(linkPath, sourcePath);
 		if (!targetFile || targetFile.path === sourcePath) return;
 		this.coordinator?.markAnchorNavigation({
-			linkText: href,
+			linkText,
 			sourcePath,
 			targetFilePath: targetFile.path,
 		});
