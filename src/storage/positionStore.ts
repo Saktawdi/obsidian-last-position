@@ -221,10 +221,6 @@ export class PositionStore {
 		return fileRecord ? { ...fileRecord } : undefined;
 	}
 
-	replaceFileRecords(legacy: unknown, now = Date.now()): void {
-		this.state.files = migratePositionState(undefined, legacy, now).files;
-	}
-
 	saveBookmark(
 		filePath: string,
 		requestedName: string,
