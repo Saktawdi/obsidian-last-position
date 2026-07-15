@@ -1,11 +1,11 @@
 import { Menu, Notice } from 'obsidian';
-import { BookmarkNameModal, BookmarkSuggestModal } from '../component/bookmarkModals';
-import { ConfirmModal } from '../component/confirmedModal';
+import { BookmarkNameModal, BookmarkSuggestModal } from '../ui/bookmarkModals';
+import { ConfirmModal } from '../ui/confirmModal';
 import {
 	BOOKMARK_COMMAND_IDS,
 	formatBookmarkSavedNotice,
 	getBookmarkCommandNames,
-} from '../position/bookmarkCommands';
+} from './bookmarkCommandRules';
 import type { CommandContext } from './commandContext';
 import type { CommandModule, CommandRegistrar } from './commandRegistry';
 import { getTranslation } from '.language/translations';

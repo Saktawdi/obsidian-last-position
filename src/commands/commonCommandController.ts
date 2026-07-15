@@ -4,7 +4,7 @@ import {
 	COMMON_COMMAND_IDS,
 	executeToLastPosition,
 	getCommonCommandNames,
-} from '../position/commonCommands';
+} from './commonCommandRules';
 import type { CommandContext } from './commandContext';
 import type { CommandModule, CommandRegistrar } from './commandRegistry';
 

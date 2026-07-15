@@ -1,7 +1,7 @@
 import { Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
 import type { TextComponent } from 'obsidian';
 import { getTranslation } from '.language/translations';
-import { DataTable, DataTableContext } from '../component/dataTable';
+import { DataTable, DataTableContext } from '../ui/dataTable';
 import { DataExportImportUtil } from '../utils/dataExportImportUtil';
 import type { PositionState } from '../domain/positionTypes';
 

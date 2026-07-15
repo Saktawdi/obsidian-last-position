@@ -1,13 +1,13 @@
 import { setTooltip } from 'obsidian';
 import { getTranslation } from '.language/translations';
-import type { BookmarkCommandController } from '../commands/bookmarkCommands';
+import type { BookmarkCommandController } from '../commands/bookmarkCommandController';
 import {
 	getStatusBarBookmarkAction,
 	getStatusBarBookmarkTooltip,
 	STATUS_BAR_BOOKMARK_ACTIONS,
 	STATUS_BAR_BOOKMARK_CLASS,
 	STATUS_BAR_BOOKMARK_FLASH_CLASS,
-} from '../position/statusBarBookmarkActions';
+} from './statusBarBookmarkActions';
 
 export type StatusBarEventRegistrar = (
 	element: HTMLElement,

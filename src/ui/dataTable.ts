@@ -1,6 +1,6 @@
 import { App, setIcon } from 'obsidian';
 import { getTranslation } from '.language/translations';
-import { ConfirmModal } from './confirmedModal';
+import { ConfirmModal } from './confirmModal';
 import type { ScrollPositionRecord } from 'src/domain/positionTypes';
 import type { PositionStore } from '../storage/positionStore';
 import type { LastPositionSettings } from '../settings/settingsModel';

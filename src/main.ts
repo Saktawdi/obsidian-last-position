@@ -8,8 +8,8 @@ import {
 	createObsidianPositionCore,
 	ObsidianPositionCore,
 } from './core/obsidianPositionCore';
-import { BookmarkCommandController } from './commands/bookmarkCommands';
-import { CommonCommandController } from './commands/commonCommands';
+import { BookmarkCommandController } from './commands/bookmarkCommandController';
+import { CommonCommandController } from './commands/commonCommandController';
 import { CommandRegistry } from './commands/commandRegistry';
 import { StatusBarController } from './ui/statusBarController';
 import { ParsedSettingsData, parseSettingsData } from './position/settingsData';
