@@ -9,6 +9,7 @@ import {
 	ObsidianPositionCore,
 } from './adapters/obsidian/positionCoreFactory';
 import { BookmarkCommandController } from './commands/bookmarkCommands';
+import { CommonCommandController } from './commands/commonCommands';
 import { CommandRegistry } from './commands/commandRegistry';
 import { StatusBarController } from './ui/statusBarController';
 import { ParsedSettingsData, parseSettingsData } from './position/settingsData';
@@ -25,6 +26,7 @@ export default class LastPositionPlugin extends Plugin {
 	private persistence?: PositionPersistenceService;
 	private commandRegistry?: CommandRegistry;
 	private bookmarkCommands?: BookmarkCommandController;
+	private commonCommands?: CommonCommandController;
 	private statusBarController?: StatusBarController;
 
 	async onload(): Promise<void> {
@@ -155,14 +157,19 @@ export default class LastPositionPlugin extends Plugin {
 		this.core = core;
 		const coordinator = core.getCoordinator();
 		this.coordinator = coordinator as PositionCoordinator<unknown, unknown>;
-		this.bookmarkCommands = new BookmarkCommandController({
+		const commandContext = {
 			app: this.app,
 			store: this.positionStore,
 			getCoordinator: () => this.coordinator,
 			persist: () => this.persistPositionState(),
 			flashStatusBar: () => this.flashStatusBar(),
-		});
-		this.commandRegistry = new CommandRegistry([this.bookmarkCommands]);
+		};
+		this.commonCommands = new CommonCommandController(commandContext);
+		this.bookmarkCommands = new BookmarkCommandController(commandContext);
+		this.commandRegistry = new CommandRegistry([
+			this.commonCommands,
+			this.bookmarkCommands,
+		]);
 		this.commandRegistry.register(this);
 		core.start(this.app.workspace.activeLeaf);
 		this.registerEvent(this.app.workspace.on('active-leaf-change', leaf => {

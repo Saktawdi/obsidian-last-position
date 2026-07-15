@@ -80,6 +80,9 @@ export interface Translation {
     saveBookmarkCommand: string;
     selectBookmarkCommand: string;
     removeBookmarkCommand: string;
+    toLastPositionCommand: string;
+    noLastPosition: string;
+    lastPositionStale: string;
     bookmarkNameTitle: string;
     bookmarkNamePlaceholder: string;
     bookmarkSaved: string;
@@ -165,6 +168,9 @@ export const TRANSLATIONS: Record<string, Translation> = {
         saveBookmarkCommand: "保存书签",
         selectBookmarkCommand: "选择书签",
         removeBookmarkCommand: "删除书签",
+        toLastPositionCommand: "跳转到上次位置",
+        noLastPosition: "当前文件暂无历史位置",
+        lastPositionStale: "当前文件已发生变化，未执行位置跳转",
         bookmarkNameTitle: "保存位置书签",
         bookmarkNamePlaceholder: "输入书签名称",
         bookmarkSaved: "书签已保存：{name}",
@@ -248,6 +254,9 @@ export const TRANSLATIONS: Record<string, Translation> = {
         saveBookmarkCommand: "Save Bookmark",
         selectBookmarkCommand: "Select Bookmark",
         removeBookmarkCommand: "Remove Bookmark",
+        toLastPositionCommand: "To last position",
+        noLastPosition: "No saved position for the current file",
+        lastPositionStale: "The current file changed; the position jump was not applied",
         bookmarkNameTitle: "Save Position Bookmark",
         bookmarkNamePlaceholder: "Enter bookmark name",
         bookmarkSaved: "Bookmark saved: {name}",
